@@ -1,5 +1,11 @@
 # RouteGuard Detailed Task Checklist
 
+## Table of Contents
+1. [Legend](#legend)
+2. [Original Tasks 1-15 Detailed Breakdown](#original-tasks-1-15-detailed-breakdown)
+3. [Current Status Summary (as of 2026-08-14)](#current-status-summary-as-of-2026-08-14)
+4. [Next Immediate Actions](#next-immediate-actions)
+
 This document provides a detailed breakdown of each original task from CLAUDE.md with specific sub-items to track progress.
 
 ## Legend

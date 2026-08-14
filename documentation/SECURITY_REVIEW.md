@@ -1,5 +1,12 @@
 # RouteGuard Security Review - Git Configuration
 
+## Table of Contents
+1. [Summary of Changes Made](#summary-of-changes-made)
+2. [Developer Instructions](#developer-instructions)
+3. [Security Validation](#security-validation)
+4. [Next Steps for Enhanced Security](#next-steps-for-enhanced-security)
+5. [Current Risk Assessment](#current-risk-assessment)
+
 ## Summary of Changes Made
 
 ### Updated .gitignore

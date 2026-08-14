@@ -1,5 +1,14 @@
 # RouteGuard Testing Guide
 
+## Table of Contents
+1. [Preparing Supabase for Deployment](#preparing-supabase-for-deployment)
+2. [Testing on Android Device](#testing-on-android-device)
+3. [Testing on Web](#testing-on-web)
+4. [Common Testing Scenarios](#common-testing-scenarios)
+5. [Performance Monitoring](#performance-monitoring)
+6. [Troubleshooting](#troubleshooting)
+7. [Release Checklist](#release-checklist)
+
 ## Preparing Supabase for Deployment
 
 ### 1. Apply Database Schema

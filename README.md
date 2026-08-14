@@ -2,6 +2,22 @@
 
 RouteGuard is a Flutter-based mobile and web application designed for community-driven hazard reporting and navigation. It allows users to report, confirm, and navigate around road hazards while providing agencies with tools to publish official advisories. The application has been migrated from Firebase to Supabase to eliminate ongoing costs while maintaining identical functionality.
 
+## Table of Contents
+1. [Features](#features)
+2. [Platform Support](#platform-support)
+3. [Technical Stack](#technical-stack)
+4. [Project Structure](#project-structure)
+5. [Setup Instructions](#setup-instructions)
+6. [Environment Variables](#environment-variables)
+7. [Testing](#testing)
+8. [Documentation](#documentation)
+9. [Security](#security)
+10. [Future Enhancements](#future-enhancements)
+11. [Contributing](#contributing)
+12. [Development Workflow](#development-workflow)
+13. [License](#license)
+14. [Acknowledgements](#acknowledgements)
+
 ## FEATURES
 
 - **User Authentication**: Email/password sign up/sign in via Supabase Auth

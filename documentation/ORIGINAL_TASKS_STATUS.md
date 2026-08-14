@@ -1,5 +1,10 @@
 # Original Tasks 1-15 Status Tracking
 
+## Table of Contents
+1. [Task Completion Status](#task-completion-status)
+2. [Legend](#legend)
+3. [Notes](#notes)
+
 This document tracks the completion status of the original 15 tasks outlined in the CLAUDE.md file.
 
 ## Task Completion Status
