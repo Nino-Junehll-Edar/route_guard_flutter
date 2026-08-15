@@ -63,11 +63,11 @@ This section maps the original tasks from CLAUDE.md to our current tracking syst
 ## CURRENT FOCUS: AGENCY WEB DASHBOARD COMPLETION
 
 ### 10. Agency Web Dashboard (Request-Access Workflow)
-- [ ] Complete dashboard screen implementation
-- [ ] Implement approval workflow for agency requests
+- [x] Complete dashboard screen implementation
+- [x] Implement approval workflow for agency requests
 - [ ] Add official advisory publishing functionality
-- [ ] Agency hazard moderation interface
-- [ ] Agency analytics and reporting dashboard
+- [x] Agency hazard moderation interface
+- [x] Agency analytics and reporting dashboard
 - [ ] Role-based access control for agency officials
 
 ## FUTURE ENHANCEMENTS (POST-MVP)
