@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:route_guard/services/performance_monitoring_service.dart';
 
@@ -41,6 +42,19 @@ class AuthService {
     return _perfService.logDuration('SignOut', () async {
       await _supabase.auth.signOut();
     });
+  }
+
+  Future<void> signOutAndRedirect(BuildContext context) async {
+    try {
+      await signOut();
+      if (!context.mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout failed: $e')),
+      );
+    }
   }
 
   Stream<AuthState> get authStateChanges =>

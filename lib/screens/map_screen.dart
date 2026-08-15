@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:route_guard/models/hazard.dart';
+import 'package:route_guard/services/auth_service.dart';
 import 'package:route_guard/services/service_locator.dart';
 import 'package:route_guard/services/location_service.dart';
 import 'package:route_guard/services/notification_service.dart';
@@ -196,6 +197,11 @@ class _MapScreenState extends State<MapScreen> {
                 builder: (context) => const ProfileScreen(),
               ));
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () => AuthService().signOutAndRedirect(context),
           ),
           if (_isDestinationSet)
             IconButton(

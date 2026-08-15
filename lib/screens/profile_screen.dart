@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:route_guard/models/user.dart';
+import 'package:route_guard/services/auth_service.dart';
 import 'package:route_guard/services/synchronized_database_service.dart';
 import 'package:route_guard/services/service_locator.dart';
 
@@ -63,6 +64,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadUserProfile,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () => AuthService().signOutAndRedirect(context),
           ),
         ],
       ),

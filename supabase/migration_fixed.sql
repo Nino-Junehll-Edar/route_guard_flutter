@@ -14,6 +14,13 @@ BEGIN
     END IF;
 END $$;
 
+GRANT SELECT ON public.hazards TO anon, authenticated;
+GRANT INSERT, UPDATE ON public.hazards TO authenticated;
+GRANT SELECT ON public.official_advisories TO anon, authenticated;
+GRANT INSERT, UPDATE ON public.official_advisories TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.moderation_queue TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.user_profiles TO authenticated;
+
 -- Policy: Users can view their own profile
 DO $$
 BEGIN

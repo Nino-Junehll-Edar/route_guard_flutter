@@ -61,12 +61,15 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _logout() async {
     final authService = AuthService();
-    await authService.signOut();
-    if (mounted) {
+    try {
+      await authService.signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Logged out successfully')),
+        SnackBar(content: Text('Logout failed: $e')),
       );
-      await _loadDashboardData();
     }
   }
 
