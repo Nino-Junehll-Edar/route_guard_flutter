@@ -21,26 +21,41 @@ GRANT INSERT, UPDATE ON public.official_advisories TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.moderation_queue TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.user_profiles TO authenticated;
 
--- Policy: Users can view their own profile
+CREATE OR REPLACE FUNCTION public.is_agency_staff()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_profiles up
+    WHERE up.id = auth.uid()
+      AND up.role IN ('agency_official', 'admin')
+  );
+$$;
+
+-- Policy: Users can view their own profile or agency staff can view all
 DO $$
 BEGIN
     BEGIN
-        EXECUTE 'DROP POLICY IF EXISTS "Users can view their own profile" ON user_profiles';
+        EXECUTE 'DROP POLICY IF EXISTS "Users can view their own profile or agency staff can view all" ON user_profiles';
     EXCEPTION
         WHEN OTHERS THEN NULL;
     END;
-    EXECUTE 'CREATE POLICY "Users can view their own profile" ON user_profiles FOR SELECT USING (auth.uid() = id)';
+    EXECUTE 'CREATE POLICY "Users can view their own profile or agency staff can view all" ON user_profiles FOR SELECT USING (auth.uid() = id OR public.is_agency_staff())';
 END $$;
 
--- Policy: Agency officials can view all profiles
+-- Policy: Agency staff can view all profiles
 DO $$
 BEGIN
     BEGIN
-        EXECUTE 'DROP POLICY IF EXISTS "Agency officials can view all profiles" ON user_profiles';
+        EXECUTE 'DROP POLICY IF EXISTS "Agency staff can update approval status" ON user_profiles';
     EXCEPTION
         WHEN OTHERS THEN NULL;
     END;
-    EXECUTE 'CREATE POLICY "Agency officials can view all profiles" ON user_profiles FOR SELECT USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = ''agency_official''))';
+    EXECUTE 'CREATE POLICY "Agency staff can update approval status" ON user_profiles FOR UPDATE USING (public.is_agency_staff()) WITH CHECK (approval_status IN (''approved'', ''rejected'') AND approved_at IS NOT NULL AND approved_by = auth.uid())';
 END $$;
 
 -- Policy: Users can update their own profile
@@ -52,17 +67,6 @@ BEGIN
         WHEN OTHERS THEN NULL;
     END;
     EXECUTE 'CREATE POLICY "Users can update their own profile" ON user_profiles FOR UPDATE USING (auth.uid() = id)';
-END $$;
-
--- Policy: Agency officials can update approval status
-DO $$
-BEGIN
-    BEGIN
-        EXECUTE 'DROP POLICY IF EXISTS "Agency officials can update approval status" ON user_profiles';
-    EXCEPTION
-        WHEN OTHERS THEN NULL;
-    END;
-    EXECUTE 'CREATE POLICY "Agency officials can update approval status" ON user_profiles FOR UPDATE USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = ''agency_official'')) WITH CHECK (approval_status IN (''approved'', ''rejected'') AND approved_at IS NOT NULL AND approved_by = auth.uid())';
 END $$;
 
 -- Policy: Users can insert their own profile

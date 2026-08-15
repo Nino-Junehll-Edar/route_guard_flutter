@@ -90,26 +90,29 @@ ALTER TABLE hazards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE moderation_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE official_advisories ENABLE ROW LEVEL SECURITY;
 
+-- Helper function: checks agency status without triggering recursive RLS evaluation.
+CREATE OR REPLACE FUNCTION public.is_agency_staff()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_profiles up
+    WHERE up.id = auth.uid()
+      AND up.role IN ('agency_official', 'admin')
+  );
+$$;
+
 -- Policies for user_profiles
--- Fixed: Non-recursive policies to avoid infinite recursion
-CREATE POLICY "Users can view own profile + agency officials view all"
+CREATE POLICY "Users can view their own profile or agency staff can view all"
     ON user_profiles
     FOR SELECT
     USING (
-        auth.uid() = id  -- Users can always view their own profile
-        OR (SELECT role FROM user_profiles WHERE id = auth.uid()) IN ('agency_official', 'admin')  -- Agency officials can view all
-    );
-
-CREATE POLICY "Agency officials can update approval status"
-    ON user_profiles
-    FOR UPDATE
-    USING (
-        (SELECT role FROM user_profiles WHERE id = auth.uid()) IN ('agency_official', 'admin')  -- Agency officials can update any profile
-    )
-    WITH CHECK (
-        approval_status IN ('approved', 'rejected')
-        AND approved_at IS NOT NULL
-        AND approved_by = auth.uid()
+        auth.uid() = id
+        OR public.is_agency_staff()
     );
 
 CREATE POLICY "Users can insert their own profile"
@@ -121,6 +124,16 @@ CREATE POLICY "Users can update their own profile"
     ON user_profiles
     FOR UPDATE
     USING (auth.uid() = id);
+
+CREATE POLICY "Agency staff can update approval status"
+    ON user_profiles
+    FOR UPDATE
+    USING (public.is_agency_staff())
+    WITH CHECK (
+        approval_status IN ('approved', 'rejected')
+        AND approved_at IS NOT NULL
+        AND approved_by = auth.uid()
+    );
 
 -- Policies for hazards
 CREATE POLICY "Anyone can view hazards"
@@ -161,16 +174,10 @@ CREATE POLICY "Users can view moderation_queue for their own hazards"
         )
     );
 
-CREATE POLICY "Agency officials can view all moderation_queue"
+CREATE POLICY "Agency staff can view all moderation_queue"
     ON moderation_queue
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_profiles
-            WHERE user_profiles.id = auth.uid()
-            AND user_profiles.role IN ('agency_official', 'admin')
-        )
-    );
+    USING (public.is_agency_staff());
 
 CREATE POLICY "Users can update moderation_queue for their own hazards"
     ON moderation_queue
@@ -183,16 +190,10 @@ CREATE POLICY "Users can update moderation_queue for their own hazards"
         )
     );
 
-CREATE POLICY "Agency officials can update any moderation_queue"
+CREATE POLICY "Agency staff can update any moderation_queue"
     ON moderation_queue
     FOR UPDATE
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_profiles
-            WHERE user_profiles.id = auth.uid()
-            AND user_profiles.role IN ('agency_official', 'admin')
-        )
-    );
+    USING (public.is_agency_staff());
 
 -- Policies for official_advisories
 CREATE POLICY "Anyone can view official advisories"
@@ -200,22 +201,12 @@ CREATE POLICY "Anyone can view official advisories"
     FOR SELECT
     USING (true);
 
-CREATE POLICY "Only agency officials can insert official advisories"
+CREATE POLICY "Only agency staff can insert official advisories"
     ON official_advisories
     FOR INSERT
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM user_profiles
-            WHERE id = auth.uid() AND role IN ('agency_official', 'admin')
-        )
-    );
+    WITH CHECK (public.is_agency_staff());
 
-CREATE POLICY "Only agency officials can update official advisories"
+CREATE POLICY "Only agency staff can update official advisories"
     ON official_advisories
     FOR UPDATE
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_profiles
-            WHERE id = auth.uid() AND role IN ('agency_official', 'admin')
-        )
-    );
+    USING (public.is_agency_staff());
