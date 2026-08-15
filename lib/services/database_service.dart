@@ -26,8 +26,7 @@ class DatabaseService {
     await _perfService.logDuration('UpdateUserProfile', () async {
       await _supabase
           .from('user_profiles')
-          .update(profile.toJson())
-          .eq('id', profile.id);
+          .upsert(profile.toJson(), onConflict: 'id');
     });
   }
 
@@ -37,12 +36,18 @@ class DatabaseService {
       final response = await _supabase
           .from('user_profiles')
           .select('*')
-          .not('agency', 'is', '')
-          .not('role', 'is', '')
+          .not('agency', 'is', 'null')
+          .neq('agency', '')
+          .not('role', 'is', 'null')
+          .neq('role', '')
           .eq('approval_status', 'pending')
           .order('created_at', ascending: false);
 
-      return (response as List)
+      // Ensure response is a List before casting
+      if (response == null) return [];
+      final List<dynamic> responseList = response as List<dynamic>;
+      return responseList
+          .whereType<Map<String, dynamic>>()
           .map((json) => UserProfile.fromJson(json))
           .toList();
     });
@@ -69,9 +74,19 @@ class DatabaseService {
 
   Future<void> rejectAgencyRequest(String userId) async {
     await _perfService.logDuration('RejectAgencyRequest', () async {
-      // TODO: Implement actual rejection logic
-      // This might involve notifying the user or removing the profile
-      // For now, we'll just log the action
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser == null) {
+        throw Exception('No authenticated user');
+      }
+      await _supabase
+          .from('user_profiles')
+          .update({
+            'approval_status': 'rejected',
+            'rejected_at': DateTime.now().toIso8601String(),
+            'rejected_by': currentUser.id,
+          })
+          .eq('id', userId);
+
       _perfService.logMetric('AgencyRequestRejected', 1);
     });
   }
@@ -79,13 +94,18 @@ class DatabaseService {
   // Hazard operations
   Future<List<Hazard>> getHazards({String? status, double? limit}) async {
     return _perfService.logDurationWithResult<List<Hazard>>('GetHazards', () async {
-      final query = _supabase.from('hazards').select();
+      final query = _supabase.from('hazards_with_geom').select('*');
 
       final filteredQuery = status != null ? query.eq('status', status) : query;
       final limitedQuery = limit != null ? filteredQuery.limit(limit.toInt()) : filteredQuery;
 
       final response = await limitedQuery;
-      return (response as List)
+
+      // Ensure response is a List before casting
+      if (response == null) return [];
+      final List<dynamic> responseList = response as List<dynamic>;
+      return responseList
+          .whereType<Map<String, dynamic>>()
           .map((json) => Hazard.fromJson(json))
           .toList();
     });
@@ -93,13 +113,11 @@ class DatabaseService {
 
   Future<Hazard> createHazard(Hazard hazard) async {
     return _perfService.logDurationWithResult<Hazard>('CreateHazard', () async {
-      final response = await _supabase
+      await _supabase
           .from('hazards')
-          .insert(hazard.toJson())
-          .select()
-          .single();
+          .insert(hazard.toJson());
 
-      return Hazard.fromJson(response);
+      return hazard;
     });
   }
 
@@ -135,20 +153,18 @@ class DatabaseService {
   Future<List<Map<String, dynamic>>> getHazardsForModeration() async {
     return _perfService.logDurationWithResult<List<Map<String, dynamic>>>('GetHazardsForModeration', () async {
       final response = await _supabase
-          .from('hazards')
-          .select('''
-            *,
-            moderation_queue!inner (
-              id,
-              reviewed_by,
-              reviewed_at,
-              outcome
-            )
-          ''')
-          .in_('hazards.status', ['uncertain']) // Could expand to include other statuses that need review
-          .order('hazards.timestamp', ascending: false);
+          .from('hazards_with_geom')
+          .select('*, moderation_queue!inner(id, reviewed_by, reviewed_at, outcome)')
+          .in_('status', ['uncertain']) // Could expand to include other statuses that need review
+          .order('timestamp', ascending: false);
 
-      return (response as List).map((json) => json as Map<String, dynamic>).toList();
+      // Ensure response is a List before casting
+      if (response == null) return [];
+      final List<dynamic> responseList = response as List<dynamic>;
+      return responseList
+          .whereType<Map<String, dynamic>>()
+          .map((json) => json)
+          .toList();
     });
   }
 
@@ -177,8 +193,13 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getOfficialAdvisories() async {
     return _perfService.logDurationWithResult<List<Map<String, dynamic>>>('GetOfficialAdvisories', () async {
-      final response = await _supabase.from('official_advisories').select();
-      return response as List<Map<String, dynamic>>;
+      final response = await _supabase.from('official_advisories_with_geom').select('*');
+      // Ensure response is a List before casting
+      if (response == null) return [];
+      final List<dynamic> responseList = response as List<dynamic>;
+      return responseList
+          .whereType<Map<String, dynamic>>()
+          .toList();
     });
   }
 }

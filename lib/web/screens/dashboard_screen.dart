@@ -1,10 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:route_guard/services/auth_service.dart';
 import 'package:route_guard/services/database_service.dart';
 import 'package:route_guard/models/hazard.dart';
 import 'package:route_guard/models/user.dart';
-import 'package:flutter_map/flutter_map.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -13,32 +11,25 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
   final DatabaseService _databaseService = DatabaseService();
-  final MapController _mapController = MapController();
-
-  // Tab management
-  int _selectedIndex = 0;
-
-  // Data for different tabs
-  List<UserProfile> _pendingRequests = [];
-  List<Map<String, dynamic>> _hazardsForModeration = []; // Now contains hazard + moderation_queue data
-  List<Map<String, dynamic>> _officialAdvisories = [];
-  List<Hazard> _allHazards = [];
+  late final TabController _tabController;
 
   bool _isLoading = true;
   String? _error;
 
-  // Statistics
-  int _totalHazards = 0;
-  int _pendingHazards = 0;
-  int _confirmedHazards = 0;
-  int _rejectedHazards = 0;
-
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
     _loadDashboardData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDashboardData() async {
@@ -48,19 +39,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
-      // Load data for all tabs in parallel
       await Future.wait([
-        _getPendingAgencyRequests(),
-        _getHazardsForModeration(),
-        _getOfficialAdvisories(),
-        _getAllHazards(),
-        _getHazardStatistics(),
+        _databaseService.getPendingAgencyRequests(),
+        _databaseService.getHazardsForModeration(),
+        _databaseService.getOfficialAdvisories(),
+        _databaseService.getHazards(),
       ]);
 
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) {
@@ -72,84 +59,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _getPendingAgencyRequests() async {
-    final requests = await _databaseService.getPendingAgencyRequests();
-    if (mounted) {
-      setState(() {
-        _pendingRequests = requests;
-      });
-    }
-  }
-
-  Future<void> _getHazardsForModeration() async {
-    final hazards = await _databaseService.getHazardsForModeration();
-    if (mounted) {
-      setState(() {
-        _hazardsForModeration = hazards;
-      });
-    }
-  }
-
-  Future<void> _getOfficialAdvisories() async {
-    final advisories = await _databaseService.getOfficialAdvisories();
-    if (mounted) {
-      setState(() {
-        _officialAdvisories = advisories;
-      });
-    }
-  }
-
-  Future<void> _getAllHazards() async {
-    final hazards = await _databaseService.getHazards();
-    if (mounted) {
-      setState(() {
-        _allHazards = hazards;
-      });
-    }
-  }
-
-  Future<void> _getHazardStatistics() async {
-    final hazards = await _databaseService.getHazards();
-    if (mounted) {
-      setState(() {
-        _totalHazards = hazards.length;
-        _pendingHazards = hazards.where((h) => h.status == HazardStatus.uncertain).length;
-        _confirmedHazards = hazards.where((h) => h.status == HazardStatus.clear).length;
-        _rejectedHazards = hazards.where((h) => h.status == HazardStatus.impassable).length;
-      });
-    }
-  }
-
-  Future<void> _approveAgencyRequest(String userId) async {
-    await _databaseService.approveAgencyRequest(userId);
+  Future<void> _logout() async {
+    final authService = AuthService();
+    await authService.signOut();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agency request approved!')),
+        const SnackBar(content: Text('Logged out successfully')),
       );
       await _loadDashboardData();
     }
   }
 
-  Future<void> _rejectAgencyRequest(String userId) async {
-    await _databaseService.rejectAgencyRequest(userId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agency request rejected.')),
-      );
-      await _loadDashboardData();
-    }
-  }
-
-  Future<void> _createOfficialAdvisory() async {
-    // TODO: Implement advisory creation dialog
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Advisory creation feature coming soon!')),
-    );
-  }
-
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -176,15 +96,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
             onSelected: (value) async {
               if (value == 'logout') {
-                // TODO: Implement logout
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Logout feature coming soon!')),
-                );
+                await _logout();
               }
             },
           ),
         ],
-        bottom: const TabBar(
+        bottom: TabBar(
+          controller: _tabController,
           tabs: [
             Tab(text: 'Requests'),
             Tab(text: 'Advisories'),
@@ -202,7 +120,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: const TextStyle(color: Colors.red),
                   ),
                 )
-              : const TabBarView(
+              : TabBarView(
+                  controller: _tabController,
                   children: [
                     _PendingRequestsTab(),
                     _AdvisoriesTab(),
@@ -291,7 +210,7 @@ class _PendingRequestsTabState extends State<_PendingRequestsTab> {
           margin: const EdgeInsets.all(8),
           child: ListTile(
             leading: const Icon(Icons.person_add, color: Colors.blue),
-            title: Text(request.email ?? 'No email'),
+            title: Text(request.email),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -299,14 +218,14 @@ class _PendingRequestsTabState extends State<_PendingRequestsTab> {
                   Text('Agency: ${request.agency}', style: const TextStyle(fontSize: 12)),
                 if (request.role != null && request.role!.isNotEmpty)
                   Text('Role: ${request.role}', style: const TextStyle(fontSize: 12)),
-                Text('Requested: ${request.createdAt?.toLocal().toString().split('.')[0] ?? 'Unknown'}'),
+                Text('Requested: ${request.createdAt.toLocal().toString().split('.')[0]}'),
               ],
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ElevatedButton.icon(
-                  onPressed: () => _approveRequest(request.id!),
+                  onPressed: () => _approveRequest(request.id),
                   icon: const Icon(Icons.check, size: 18),
                   label: const Text('Approve', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
@@ -316,7 +235,7 @@ class _PendingRequestsTabState extends State<_PendingRequestsTab> {
                 ),
                 const SizedBox(width: 4),
                 ElevatedButton.icon(
-                  onPressed: () => _rejectRequest(request.id!),
+                  onPressed: () => _rejectRequest(request.id),
                   icon: const Icon(Icons.close, size: 18),
                   label: const Text('Reject', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
@@ -741,10 +660,11 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
   }
 
   Widget _buildStatCard(String label, String value, IconData icon) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          width: 140,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -812,82 +732,80 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return SingleChildScrollView(
+    final recentHazards = _allHazards.length > 5 ? _allHazards.sublist(_allHazards.length - 5) : _allHazards;
+
+    return ListView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Statistics Cards
-          Row(
-            children: [
-              _buildStatCard('Total Hazards', _totalHazards.toString(), Icons.warning),
-              const SizedBox(width: 16),
-              _buildStatCard('Pending Review', _pendingHazards.toString(), Icons.pending_actions),
-              const SizedBox(width: 16),
-              _buildStatCard('Confirmed', _confirmedHazards.toString(), Icons.check_circle),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildStatCard('Marked as False/Impassable', _rejectedHazards.toString(), Icons.error),
-
-          const SizedBox(height: 32),
-
-          // Charts would go here in a real implementation
-          const Text(
-            'Hazard Trends',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
+      children: [
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            SizedBox(
+              width: 180,
+              child: _buildStatCard('Total Hazards', _totalHazards.toString(), Icons.warning),
             ),
-            child: const Center(
-              child: Text(
-                'Charts and visualizations coming soon\n(Hazard trends over time, type distribution, etc.)',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.grey, fontSize: 16),
+            SizedBox(
+              width: 180,
+              child: _buildStatCard('Pending Review', _pendingHazards.toString(), Icons.pending_actions),
+            ),
+            SizedBox(
+              width: 180,
+              child: _buildStatCard('Confirmed', _confirmedHazards.toString(), Icons.check_circle),
+            ),
+            SizedBox(
+              width: 180,
+              child: _buildStatCard('Marked as False/Impassable', _rejectedHazards.toString(), Icons.error),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+        const Text(
+          'Hazard Trends',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          height: 200,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Center(
+            child: Text(
+              'Charts and visualizations coming soon\n(Hazard trends over time, type distribution, etc.)',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 16),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Recent Activity',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        if (recentHazards.isEmpty)
+          const Text('No hazard activity yet')
+        else
+          ...recentHazards.reversed.map((hazard) {
+            return ListTile(
+              leading: Icon(
+                _getHazardIcon(hazard.hazardType),
+                color: _getHazardColor(hazard.status),
               ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Recent Activity
-          const Text(
-            'Recent Activity',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          _allHazards.isEmpty
-              ? const Text('No hazard activity yet')
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _allHazards.length > 5 ? 5 : _allHazards.length,
-                  itemBuilder: (context, index) {
-                    final hazard = _allHazards[_allHazards.length - 1 - index]; // Reverse order for newest first
-                    return ListTile(
-                      leading: Icon(
-                        _getHazardIcon(hazard.hazardType),
-                        color: _getHazardColor(hazard.status),
-                      ),
-                      title: Text(hazard.hazardType),
-                      subtitle: Text(
-                        '${hazard.status.toString().split('.').last} | ${hazard.confidence}% confidence',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      trailing: Text(
-                        hazard.timestamp?.toLocal().toString().split('.')[0] ?? 'Unknown',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    );
-                  },
-                ),
-        ],
-      ),
+              title: Text(hazard.hazardType),
+              subtitle: Text(
+                '${hazard.status.toString().split('.').last} | ${hazard.confidence}% confidence',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: Text(
+                hazard.timestamp.toLocal().toString().split('.')[0],
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            );
+          }),
+      ],
     );
   }
 }

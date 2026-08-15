@@ -1,4 +1,5 @@
 import 'package:latlong2/latlong.dart';
+import 'dart:convert';
 
 enum HazardStatus { impassable, partial, clear, uncertain }
 
@@ -34,13 +35,30 @@ class Hazard {
   });
 
   factory Hazard.fromJson(Map<String, dynamic> json) {
+    // Handle location field - try multiple possible field names for GeoJSON data
+    // Order of preference: geom, geojson, location
+    dynamic locationData = json['geom'] ?? json['geojson'] ?? json['location'];
+
+    List<dynamic> coordinates;
+
+    if (locationData is String) {
+      // Parse GeoJSON string to Map
+      final geoJson = jsonDecode(locationData) as Map<String, dynamic>;
+      coordinates = geoJson['coordinates'] as List<dynamic>;
+    } else if (locationData is Map<String, dynamic>) {
+      // Direct GeoJSON object
+      coordinates = locationData['coordinates'] as List<dynamic>;
+    } else {
+      throw FormatException('Invalid location data type: ${locationData.runtimeType}');
+    }
+
     return Hazard(
       id: json['id'] as String,
       reporterUid: json['reporter_uid'] as String,
       agencyTag: json['agency_tag'] as String?,
       location: LatLng(
-        (json['location'] as Map<String, dynamic>)['coordinates'][1] as double,
-        (json['location'] as Map<String, dynamic>)['coordinates'][0] as double,
+        coordinates[1] as double,
+        coordinates[0] as double,
       ),
       hazardType: json['hazard_type'] as String,
       description: json['description'] as String?,

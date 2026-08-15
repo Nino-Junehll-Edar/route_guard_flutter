@@ -43,9 +43,13 @@ dependencies:
   shared_preferences: ^2.2.2
   connectivity_plus: ^5.0.2
   geolocator: ^9.0.2
-  firebase_messaging: ^14.0.4
-  flutter_local_notifications: ^9.6.6
   flutter_dotenv: ^5.0.2
+  firebase_core: ^2.15.0
+  firebase_messaging: ^14.0.4
+  flutter_local_notifications: 17.2.4
+  flutter_local_notifications_linux: ^4.0.0
+  # Override app_links to a version that supports built-in Kotlin
+  app_links: 3.5.1
 
 dev_dependencies:
   flutter_test:
@@ -68,6 +72,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # To add assets to your application.
+  assets:
+    - .env
 
   # To add assets to your application, add an assets section, like this:
   # assets:

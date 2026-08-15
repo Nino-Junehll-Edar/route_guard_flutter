@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:route_guard/services/auth_service.dart';
+import 'package:route_guard/services/service_locator.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -34,11 +35,33 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      if (mounted && user != null) {
-        // Navigate to home screen after successful login
-        Navigator.of(context).pushReplacementNamed('/home');
+      // Check if widget is still mounted before using context
+      if (!mounted) return;
+
+      if (user != null) {
+        // Check user's role to determine where to navigate
+        final userProfile = await ServiceLocator()
+            .databaseService
+            .getUserProfile(user.id);
+
+        // Double-check mounted status after async call
+        if (!mounted) return;
+
+        if (userProfile != null &&
+            userProfile.agency != null &&
+            userProfile.agency!.isNotEmpty &&
+            userProfile.approvalStatus == 'approved' &&
+            (userProfile.role == 'agency_official' || userProfile.role == 'admin')) {
+          // Go to agency dashboard for agency officials
+          Navigator.of(context).pushReplacementNamed('/agency/dashboard');
+        } else {
+          // Go to regular map screen for regular users
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
       }
     } catch (e) {
+      // Check if widget is still mounted before using context
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
       });

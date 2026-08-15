@@ -4,7 +4,7 @@ import 'package:route_guard/services/service_locator.dart';
 import 'package:route_guard/models/user.dart';
 
 class RequestAccessScreen extends StatefulWidget {
-  const RequestAccessScreen({Key? key}) : super(key: key);
+  const RequestAccessScreen({super.key});
 
   @override
   State<RequestAccessScreen> createState() => _RequestAccessScreenState();
@@ -197,8 +197,8 @@ class _RequestAccessScreenState extends State<RequestAccessScreen> {
               ),
               const SizedBox(height: 24),
               const Text(
-                'Note: After submission, an administrator will review your request. ' +
-                    'You will receive notification when your access is approved.',
+                'Note: After submission, an administrator will review your request. '
+                'You will receive notification when your access is approved.',
                 style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
                 textAlign: TextAlign.center,
               ),

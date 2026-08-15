@@ -20,6 +20,30 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
+  <!-- Firebase App (core SDK) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <!-- Firebase Messaging -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+  <!-- Firebase Analytics -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
+
+  <script>
+    // Your Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyBUYmKObCQ39cb_yqA8CC9YAeKK3ujb_kI",
+      authDomain: "routeguard-cfb79.firebaseapp.com",
+      projectId: "routeguard-cfb79",
+      storageBucket: "routeguard-cfb79.firebasestorage.app",
+      messagingSenderId: "30604162158",
+      appId: "1:30604162158:web:8003c029c473e1032d627f",
+      measurementId: "G-2M6PMSN2PK"
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const analytics = firebase.analytics(app);
+  </script>
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">

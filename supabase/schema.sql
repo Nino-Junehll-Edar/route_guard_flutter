@@ -58,6 +58,26 @@ CREATE TABLE official_advisories (
   created_by UUID REFERENCES auth.users(id)
 );
 
+-- Safer PostGIS access: expose GeoJSON as a computed column in views instead of
+-- using raw ST_AsGeoJSON() in PostgREST selects, which can be misinterpreted as a
+-- relationship lookup in the schema cache.
+CREATE VIEW hazards_with_geom
+WITH (security_invoker = true) AS
+SELECT
+  h.*,
+  ST_AsGeoJSON(h.location) AS geom
+FROM hazards h;
+
+CREATE VIEW official_advisories_with_geom
+WITH (security_invoker = true) AS
+SELECT
+  oa.*,
+  ST_AsGeoJSON(oa.location) AS geom
+FROM official_advisories oa;
+
+GRANT SELECT ON public.hazards_with_geom TO anon, authenticated;
+GRANT SELECT ON public.official_advisories_with_geom TO anon, authenticated;
+
 -- Enable Row Level Security (we'll define policies later)
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hazards ENABLE ROW LEVEL SECURITY;
@@ -65,34 +85,20 @@ ALTER TABLE moderation_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE official_advisories ENABLE ROW LEVEL SECURITY;
 
 -- Policies for user_profiles
-CREATE POLICY "Users can view their own profile"
-    ON user_profiles
-    FOR SELECT
-    USING (auth.uid() = id);
-
-CREATE POLICY "Agency officials can view all profiles"
+-- Fixed: Non-recursive policies to avoid infinite recursion
+CREATE POLICY "Users can view own profile + agency officials view all"
     ON user_profiles
     FOR SELECT
     USING (
-        EXISTS (
-            SELECT 1 FROM user_profiles
-            WHERE id = auth.uid() AND role = 'agency_official'
-        )
+        auth.uid() = id  -- Users can always view their own profile
+        OR (SELECT role FROM user_profiles WHERE id = auth.uid()) IN ('agency_official', 'admin')  -- Agency officials can view all
     );
-
-CREATE POLICY "Users can update their own profile"
-    ON user_profiles
-    FOR UPDATE
-    USING (auth.uid() = id);
 
 CREATE POLICY "Agency officials can update approval status"
     ON user_profiles
     FOR UPDATE
     USING (
-        EXISTS (
-            SELECT 1 FROM user_profiles
-            WHERE id = auth.uid() AND role = 'agency_official'
-        )
+        (SELECT role FROM user_profiles WHERE id = auth.uid()) IN ('agency_official', 'admin')  -- Agency officials can update any profile
     )
     WITH CHECK (
         approval_status IN ('approved', 'rejected')
@@ -104,6 +110,11 @@ CREATE POLICY "Users can insert their own profile"
     ON user_profiles
     FOR INSERT
     WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can update their own profile"
+    ON user_profiles
+    FOR UPDATE
+    USING (auth.uid() = id);
 
 -- Policies for hazards
 CREATE POLICY "Anyone can view hazards"
@@ -151,7 +162,7 @@ CREATE POLICY "Agency officials can view all moderation_queue"
         EXISTS (
             SELECT 1 FROM user_profiles
             WHERE user_profiles.id = auth.uid()
-            AND user_profiles.role = 'agency_official'
+            AND user_profiles.role IN ('agency_official', 'admin')
         )
     );
 
@@ -173,7 +184,7 @@ CREATE POLICY "Agency officials can update any moderation_queue"
         EXISTS (
             SELECT 1 FROM user_profiles
             WHERE user_profiles.id = auth.uid()
-            AND user_profiles.role = 'agency_official'
+            AND user_profiles.role IN ('agency_official', 'admin')
         )
     );
 
@@ -189,7 +200,7 @@ CREATE POLICY "Only agency officials can insert official advisories"
     WITH CHECK (
         EXISTS (
             SELECT 1 FROM user_profiles
-            WHERE id = auth.uid() AND role = 'agency_official'
+            WHERE id = auth.uid() AND role IN ('agency_official', 'admin')
         )
     );
 
@@ -199,6 +210,6 @@ CREATE POLICY "Only agency officials can update official advisories"
     USING (
         EXISTS (
             SELECT 1 FROM user_profiles
-            WHERE id = auth.uid() AND role = 'agency_official'
+            WHERE id = auth.uid() AND role IN ('agency_official', 'admin')
         )
     );

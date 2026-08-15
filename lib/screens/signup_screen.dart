@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:route_guard/models/user.dart';
 import 'package:route_guard/services/auth_service.dart';
+import 'package:route_guard/services/service_locator.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -43,11 +45,58 @@ class _SignupScreenState extends State<SignupScreen> {
         _passwordController.text,
       );
 
-      if (mounted && user != null) {
-        // Navigate to login screen after successful signup
-        Navigator.of(context).pushReplacementNamed('/login');
+      // Check if widget is still mounted
+      if (!mounted) return;
+
+      if (user != null) {
+        // First, check if a profile already exists for this user
+        final existingProfile = await ServiceLocator()
+            .databaseService
+            .getUserProfile(user.id);
+
+        UserProfile userProfile;
+        if (existingProfile == null) {
+          // Create a default profile for new users (regular users)
+          final defaultProfile = UserProfile(
+            id: user.id,
+            reputation: 0,
+            email: user.email ?? _emailController.text.trim(),
+            displayName: null,
+            agency: null,
+            role: null,
+            approvalStatus: null,
+            approvedAt: null,
+            approvedBy: null,
+            createdAt: DateTime.now(),
+          );
+          await ServiceLocator().databaseService.updateUserProfile(defaultProfile);
+          userProfile = defaultProfile;
+        } else {
+          userProfile = existingProfile;
+        }
+
+        // Check if widget is still mounted after the async profile operations
+        if (!mounted) return;
+
+        // Determine navigation based on profile
+        if (userProfile.agency != null &&
+            userProfile.agency!.isNotEmpty &&
+            userProfile.approvalStatus == 'approved' &&
+            (userProfile.role == 'agency_official' || userProfile.role == 'admin')) {
+          // Go to agency dashboard for approved agency officials
+          if (mounted) {
+            Navigator.of(context).pushReplacementNamed('/agency/dashboard');
+          }
+        } else {
+          // Go to home screen for regular users or unapproved agency requests
+          if (mounted) {
+            Navigator.of(context).pushReplacementNamed('/home');
+          }
+        }
       }
     } catch (e) {
+      // Check if widget is still mounted before using context
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
       });

@@ -25,13 +25,16 @@ class AuthService {
     });
   }
 
-  // Google sign-in would require additional setup and packages
-  // For now, we'll focus on email/password which is the core requirement
   Future<User?> signInWithGoogle() async {
-    // TODO: Implement Google sign-in when needed
-    // This would require additional configuration and possibly
-    // the google_sign_in package
-    throw UnimplementedError('Google sign-in not yet implemented');
+    return _perfService.logDurationWithResult<User?>('SignInWithGoogle', () async {
+      await _supabase.auth.signInWithOAuth(
+        Provider.google,
+      );
+      // signInWithOAuth initiates the OAuth flow and doesn't return a session directly
+      // The actual user will be available via authStateChanges after redirect
+      // Return null here and rely on authStateChanges listener to get the user
+      return null;
+    });
   }
 
   Future<void> signOut() async {
