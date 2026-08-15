@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:route_guard/supabase_options.dart';
 import 'package:route_guard/screens/login_screen.dart';
@@ -8,6 +9,7 @@ import 'package:route_guard/services/service_locator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env"); // Load environment variables
   await SupabaseOptions.initialize(); // Initialize Supabase
   await ServiceLocator().initialize(); // Initialize services
   runApp(const RouteGuardApp());

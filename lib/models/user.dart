@@ -5,6 +5,9 @@ class UserProfile {
   final String? displayName;
   final String? agency;
   final String? role;
+  final String? approvalStatus;
+  final DateTime? approvedAt;
+  final String? approvedBy;
   final DateTime createdAt;
 
   UserProfile({
@@ -14,6 +17,9 @@ class UserProfile {
     this.displayName,
     this.agency,
     this.role,
+    this.approvalStatus,
+    this.approvedAt,
+    this.approvedBy,
     required this.createdAt,
   });
 
@@ -25,6 +31,9 @@ class UserProfile {
       displayName: json['display_name'] as String?,
       agency: json['agency'] as String?,
       role: json['role'] as String?,
+      approvalStatus: json['approval_status'] as String?,
+      approvedAt: json['approved_at'] != null ? DateTime.parse(json['approved_at'] as String) : null,
+      approvedBy: json['approved_by'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -37,6 +46,9 @@ class UserProfile {
       'display_name': displayName,
       'agency': agency,
       'role': role,
+      'approval_status': approvalStatus,
+      'approved_at': approvedAt?.toIso8601String(),
+      'approved_by': approvedBy,
       'created_at': createdAt.toIso8601String(),
     };
   }

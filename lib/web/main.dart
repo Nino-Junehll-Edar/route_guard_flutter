@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:route_guard/supabase_options.dart';
 import 'package:route_guard/web/screens/request_access_screen.dart';
@@ -6,6 +7,7 @@ import 'package:route_guard/web/screens/dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env"); // Load environment variables
   await SupabaseOptions.initialize(); // Initialize Supabase
   runApp(const AgencyWebApp());
 }

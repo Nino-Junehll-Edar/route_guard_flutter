@@ -31,6 +31,51 @@ class DatabaseService {
     });
   }
 
+  // Agency request operations
+  Future<List<UserProfile>> getPendingAgencyRequests() async {
+    return _perfService.logDurationWithResult<List<UserProfile>>('GetPendingAgencyRequests', () async {
+      final response = await _supabase
+          .from('user_profiles')
+          .select('*')
+          .not('agency', 'is', '')
+          .not('role', 'is', '')
+          .eq('approval_status', 'pending')
+          .order('created_at', ascending: false);
+
+      return (response as List)
+          .map((json) => UserProfile.fromJson(json))
+          .toList();
+    });
+  }
+
+  Future<void> approveAgencyRequest(String userId) async {
+    await _perfService.logDuration('ApproveAgencyRequest', () async {
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser == null) {
+        throw Exception('No authenticated user');
+      }
+      await _supabase
+          .from('user_profiles')
+          .update({
+            'approval_status': 'approved',
+            'approved_at': DateTime.now().toIso8601String(),
+            'approved_by': currentUser.id,
+          })
+          .eq('id', userId);
+
+      _perfService.logMetric('AgencyRequestApproved', 1);
+    });
+  }
+
+  Future<void> rejectAgencyRequest(String userId) async {
+    await _perfService.logDuration('RejectAgencyRequest', () async {
+      // TODO: Implement actual rejection logic
+      // This might involve notifying the user or removing the profile
+      // For now, we'll just log the action
+      _perfService.logMetric('AgencyRequestRejected', 1);
+    });
+  }
+
   // Hazard operations
   Future<List<Hazard>> getHazards({String? status, double? limit}) async {
     return _perfService.logDurationWithResult<List<Hazard>>('GetHazards', () async {
@@ -86,6 +131,27 @@ class DatabaseService {
     }).eq('id', moderationId);
   }
 
+  // Get hazards that need moderation along with their moderation queue info
+  Future<List<Map<String, dynamic>>> getHazardsForModeration() async {
+    return _perfService.logDurationWithResult<List<Map<String, dynamic>>>('GetHazardsForModeration', () async {
+      final response = await _supabase
+          .from('hazards')
+          .select('''
+            *,
+            moderation_queue!inner (
+              id,
+              reviewed_by,
+              reviewed_at,
+              outcome
+            )
+          ''')
+          .in_('hazards.status', ['uncertain']) // Could expand to include other statuses that need review
+          .order('hazards.timestamp', ascending: false);
+
+      return (response as List).map((json) => json as Map<String, dynamic>).toList();
+    });
+  }
+
   // Official advisories operations
   Future<void> createOfficialAdvisory({
     required String location,
@@ -95,18 +161,24 @@ class DatabaseService {
     required DateTime validUntil,
     required String createdBy,
   }) async {
-    await _supabase.from('official_advisories').insert({
-      'location': location,
-      'hazard_type': hazardType,
-      'description': description,
-      'valid_from': validFrom.toIso8601String(),
-      'valid_until': validUntil.toIso8601String(),
-      'created_by': createdBy,
+    await _perfService.logDurationWithResult('CreateOfficialAdvisory', () async {
+      await _supabase
+          .from('official_advisories')
+          .insert({
+            'location': location,
+            'hazard_type': hazardType,
+            'description': description,
+            'valid_from': validFrom.toIso8601String(),
+            'valid_until': validUntil.toIso8601String(),
+            'created_by': createdBy,
+          });
     });
   }
 
   Future<List<Map<String, dynamic>>> getOfficialAdvisories() async {
-    final response = await _supabase.from('official_advisories').select();
-    return response as List<Map<String, dynamic>>;
+    return _perfService.logDurationWithResult<List<Map<String, dynamic>>>('GetOfficialAdvisories', () async {
+      final response = await _supabase.from('official_advisories').select();
+      return response as List<Map<String, dynamic>>;
+    });
   }
 }

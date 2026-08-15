@@ -11,6 +11,9 @@ CREATE TABLE user_profiles (
   display_name TEXT,
   agency TEXT,
   role TEXT,
+  approval_status TEXT DEFAULT 'pending' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
+  approved_at TIMESTAMPTZ,
+  approved_by UUID REFERENCES auth.users(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -67,10 +70,35 @@ CREATE POLICY "Users can view their own profile"
     FOR SELECT
     USING (auth.uid() = id);
 
+CREATE POLICY "Agency officials can view all profiles"
+    ON user_profiles
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_profiles
+            WHERE id = auth.uid() AND role = 'agency_official'
+        )
+    );
+
 CREATE POLICY "Users can update their own profile"
     ON user_profiles
     FOR UPDATE
     USING (auth.uid() = id);
+
+CREATE POLICY "Agency officials can update approval status"
+    ON user_profiles
+    FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_profiles
+            WHERE id = auth.uid() AND role = 'agency_official'
+        )
+    )
+    WITH CHECK (
+        approval_status IN ('approved', 'rejected')
+        AND approved_at IS NOT NULL
+        AND approved_by = auth.uid()
+    );
 
 CREATE POLICY "Users can insert their own profile"
     ON user_profiles

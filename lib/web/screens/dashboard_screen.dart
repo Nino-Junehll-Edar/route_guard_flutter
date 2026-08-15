@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:route_guard/services/database_service.dart';
 import 'package:route_guard/models/hazard.dart';
 import 'package:route_guard/models/user.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -23,7 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Data for different tabs
   List<UserProfile> _pendingRequests = [];
-  List<Hazard> _hazardsForModeration = [];
+  List<Map<String, dynamic>> _hazardsForModeration = []; // Now contains hazard + moderation_queue data
   List<Map<String, dynamic>> _officialAdvisories = [];
   List<Hazard> _allHazards = [];
 
@@ -150,20 +149,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _moderateHazard(String hazardId, String outcome) async {
-    await _databaseService.reviewModerationQueue(
-      hazardId,
-      'agency_official', // TODO: Get actual agency official ID from auth
-      outcome
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hazard marked as $outcome')),
-      );
-      await _loadDashboardData();
-    }
-  }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -486,13 +472,32 @@ class _ModerationTab extends StatefulWidget {
 
 class _ModerationTabState extends State<_ModerationTab> {
   final DatabaseService _databaseService = DatabaseService();
-  List<Hazard> _hazardsForModeration = [];
+  List<Map<String, dynamic>> _hazardsForModeration = []; // Contains hazard + moderation_queue data
   bool _isLoading = true;
+  String? _agencyOfficialId; // To store the agency official's user ID
 
   @override
   void initState() {
     super.initState();
-    _loadHazards();
+    _fetchAgencyOfficialId();
+  }
+
+  Future<void> _fetchAgencyOfficialId() async {
+    try {
+      final user = _databaseService.supabase.auth.currentUser;
+      if (user != null && mounted) {
+        setState(() {
+          _agencyOfficialId = user.id;
+        });
+        await _loadHazards();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadHazards() async {
@@ -514,17 +519,33 @@ class _ModerationTabState extends State<_ModerationTab> {
     }
   }
 
-  Future<void> _moderateHazard(String hazardId, String outcome) async {
-    await _databaseService.reviewModerationQueue(
-      hazardId,
-      'agency_official', // TODO: Get actual agency official ID from auth
-      outcome
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hazard marked as $outcome')),
+  Future<void> _moderateHazard(String moderationQueueId, String outcome) async {
+    if (_agencyOfficialId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: Agency official ID not available')),
+        );
+      }
+      return;
+    }
+    try {
+      await _databaseService.reviewModerationQueue(
+        moderationQueueId,
+        _agencyOfficialId!,
+        outcome
       );
-      await _loadHazards();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hazard marked as $outcome')),
+        );
+        await _loadHazards();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to moderate hazard: $e')),
+        );
+      }
     }
   }
 
@@ -575,7 +596,13 @@ class _ModerationTabState extends State<_ModerationTab> {
     return ListView.builder(
       itemCount: _hazardsForModeration.length,
       itemBuilder: (context, index) {
-        final hazard = _hazardsForModeration[index];
+        final hazardData = _hazardsForModeration[index];
+        // Extract hazard data (excluding the moderation_queue field)
+        final hazardJson = Map<String, dynamic>.from(hazardData);
+        hazardJson.remove('moderation_queue');
+        final hazard = Hazard.fromJson(hazardJson);
+        final moderationQueueId = hazardData['moderation_queue']['id'] as String;
+
         return Card(
           margin: const EdgeInsets.all(8),
           child: ExpansionTile(
@@ -595,19 +622,19 @@ class _ModerationTabState extends State<_ModerationTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (hazard.description != null && hazard.description!.isNotEmpty)
+                    if (hazard.description != null && hazard.description!.isNotEmpty) ...[
                       Text(
                         'Description:',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    if (hazard.description != null && hazard.description!.isNotEmpty)
                       Text(hazard.description!),
+                    ],
                     const SizedBox(height: 12),
                     Text(
                       'Location: ${hazard.location.latitude.toStringAsFixed(6)}, ${hazard.location.longitude.toStringAsFixed(6)}',
                       style: const TextStyle(fontSize: 12),
                     ),
-                    if (hazard.photo_url != null && hazard.photo_url!.isNotEmpty)
+                    if (hazard.photoUrl != null && hazard.photoUrl!.isNotEmpty) ...[
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -617,7 +644,7 @@ class _ModerationTabState extends State<_ModerationTab> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Image.network(
-                            hazard.photo_url!,
+                            hazard.photoUrl!,
                             width: 200,
                             height: 150,
                             fit: BoxFit.cover,
@@ -626,12 +653,13 @@ class _ModerationTabState extends State<_ModerationTab> {
                           ),
                         ],
                       ),
+                    ],
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () => _moderateHazard(hazard.id!, 'confirmed'),
+                          onPressed: () => _moderateHazard(moderationQueueId, 'confirmed'),
                           icon: const Icon(Icons.check_circle, size: 20),
                           label: const Text('Confirm'),
                           style: ElevatedButton.styleFrom(
@@ -639,7 +667,7 @@ class _ModerationTabState extends State<_ModerationTab> {
                           ),
                         ),
                         ElevatedButton.icon(
-                          onPressed: () => _moderateHazard(hazard.id!, 'false'),
+                          onPressed: () => _moderateHazard(moderationQueueId, 'false'),
                           icon: const Icon(Icons.cancel, size: 20),
                           label: const Text('Mark as False'),
                           style: ElevatedButton.styleFrom(
@@ -647,7 +675,7 @@ class _ModerationTabState extends State<_ModerationTab> {
                           ),
                         ),
                         ElevatedButton.icon(
-                          onPressed: () => _moderateHazard(hazard.id!, 'inconclusive'),
+                          onPressed: () => _moderateHazard(moderationQueueId, 'inconclusive'),
                           icon: const Icon(Icons.help_outline, size: 20),
                           label: const Text('Inconclusive'),
                           style: ElevatedButton.styleFrom(
@@ -659,7 +687,7 @@ class _ModerationTabState extends State<_ModerationTab> {
                   ],
                 ),
               ),
-            ),
+            ],
           ),
         );
       },

@@ -54,6 +54,9 @@ class _RequestAccessScreenState extends State<RequestAccessScreen> {
           displayName: null, // Could ask for this in form
           agency: _agencyController.text.trim(),
           role: _roleController.text.trim(),
+          approvalStatus: 'pending',
+          approvedAt: null,
+          approvedBy: null,
           createdAt: DateTime.now(),
         );
 
