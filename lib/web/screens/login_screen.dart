@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:route_guard/models/user.dart';
 import 'package:route_guard/services/auth_service.dart';
 import 'package:route_guard/services/service_locator.dart';
 
-class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<SignupScreen> createState() => _SignupScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen> {
+class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
   String? _errorMessage;
@@ -22,77 +20,74 @@ class _SignupScreenState extends State<SignupScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _signUp() async {
-    if (_passwordController.text != _confirmPasswordController.text) {
-      setState(() {
-        _errorMessage = 'Passwords do not match';
-      });
-      return;
-    }
-
+  Future<void> _signIn() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final user = await _authService.signUpWithEmailPassword(
+      final user = await _authService.signInWithEmailPassword(
         _emailController.text.trim(),
         _passwordController.text,
       );
 
-      // Check if widget is still mounted
+      // Check if widget is still mounted before using context
       if (!mounted) return;
 
       if (user != null) {
-        // First, check if a profile already exists for this user
-        final existingProfile = await ServiceLocator()
+        // Check user's profile to determine if they are allowed to use the web app
+        final userProfile = await ServiceLocator()
             .databaseService
             .getUserProfile(user.id);
 
-        UserProfile userProfile;
-        if (existingProfile == null) {
-          // Create a default profile for new users (regular users)
-          final defaultProfile = UserProfile(
-            id: user.id,
-            reputation: 0,
-            email: user.email ?? _emailController.text.trim(),
-            displayName: null,
-            agency: null,
-            role: null,
-            approvalStatus: null,
-            approvedAt: null,
-            approvedBy: null,
-            createdAt: DateTime.now(),
-            platform: 'mobile',
-          );
-          await ServiceLocator().databaseService.updateUserProfile(defaultProfile);
-          userProfile = defaultProfile;
-        } else {
-          userProfile = existingProfile;
-        }
-
-        // Check if widget is still mounted after the async profile operations
+        // Double-check mounted status after async call
         if (!mounted) return;
 
-        // Determine navigation based on profile
-        if (userProfile.agency != null &&
+        // Check platform: web app only allows web platform accounts
+        if (userProfile?.platform == 'mobile') {
+          // This account was created via the mobile app, cannot use web dashboard
+          if (!mounted) return;
+          await ServiceLocator().authService.signOut();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('This account can only be accessed via the mobile app. Please use the mobile application for regular user access.')),
+          );
+          // Clear controllers and show login screen again
+          _emailController.clear();
+          _passwordController.clear();
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+
+        // Check if the user is an approved agency official
+        if (userProfile != null &&
+            userProfile.agency != null &&
             userProfile.agency!.isNotEmpty &&
             userProfile.approvalStatus == 'approved' &&
             (userProfile.role == 'agency_official' || userProfile.role == 'admin')) {
-          // Go to agency dashboard for approved agency officials
-          if (mounted) {
-            Navigator.of(context).pushReplacementNamed('/agency/dashboard');
-          }
+          // Go to agency dashboard for agency officials
+          if (!mounted) return;
+          Navigator.of(context).pushReplacementNamed('/dashboard');
         } else {
-          // Go to home screen for regular users or unapproved agency requests
-          if (mounted) {
-            Navigator.of(context).pushReplacementNamed('/home');
-          }
+          // Not an approved agency official
+          if (!mounted) return;
+          await ServiceLocator().authService.signOut();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Access denied. Only approved agency officials can access the dashboard.')),
+          );
+          // Clear controllers and show login screen again
+          _emailController.clear();
+          _passwordController.clear();
+          setState(() {
+            _isLoading = false;
+          });
         }
       }
     } catch (e) {
@@ -100,6 +95,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
+        _isLoading = false;
       });
     } finally {
       if (mounted) {
@@ -132,13 +128,13 @@ class _SignupScreenState extends State<SignupScreen> {
                     children: [
                       // Logo/Header
                       const Icon(
-                        Icons.person_add_alt_1,
+                        Icons.shield,
                         size: 64,
                         color: Color(0xFF1E3A8A),
                       ),
                       const SizedBox(height: 24),
                       const Text(
-                        'Create Account',
+                        'Agency Official Login',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
@@ -147,7 +143,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Join RouteGuard to start reporting hazards',
+                        'Sign in to access the agency dashboard',
                         style: TextStyle(
                           fontSize: 16,
                           color: Color(0xFF6B7280),
@@ -156,6 +152,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       const SizedBox(height: 32),
                       // Email Field
                       TextField(
+                        key: const Key('email'),
                         controller: _emailController,
                         decoration: InputDecoration(
                           labelText: 'Email',
@@ -191,6 +188,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       const SizedBox(height: 20),
                       // Password Field
                       TextField(
+                        key: const Key('password'),
                         controller: _passwordController,
                         decoration: InputDecoration(
                           labelText: 'Password',
@@ -199,42 +197,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             fontSize: 14,
                           ),
                           prefixIcon: Icon(
-                            Icons.lock_outlined,
-                            color: Color(0xFF6B7280),
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Color(0xFFE5E7EB)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Color(0xFFE5E7EB)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                                color: Color(0xFF1E3A8A), width: 2),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 16),
-                        ),
-                        obscureText: true,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 20),
-                      // Confirm Password Field
-                      TextField(
-                        controller: _confirmPasswordController,
-                        decoration: InputDecoration(
-                          labelText: 'Confirm Password',
-                          labelStyle: TextStyle(
-                            color: Color(0xFF6B7280),
-                            fontSize: 14,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.lock_outlined,
+                            Icons.lock_outline,
                             color: Color(0xFF6B7280),
                           ),
                           border: OutlineInputBorder(
@@ -278,11 +241,11 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                       const SizedBox(height: 24),
-                      // Sign Up Button
+                      // Login Button
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _isLoading ? null : _signUp,
+                          onPressed: _isLoading ? null : _signIn,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Color(0xFF1E3A8A),
                             foregroundColor: Colors.white,
@@ -305,7 +268,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                   ),
                                 )
                               : const Text(
-                                  'Sign Up',
+                                  'Login',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -314,13 +277,13 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Login Link
+                      // Request Access Link
                       TextButton(
                         onPressed: () {
-                          Navigator.of(context).pushNamed('/login');
+                          Navigator.of(context).pushReplacementNamed('/');
                         },
                         child: Text(
-                          'Already have an account? Login',
+                          'Need agency access? Request access here',
                           style: TextStyle(
                             color: Color(0xFF1E3A8A),
                             fontSize: 14,

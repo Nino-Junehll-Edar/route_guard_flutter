@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:route_guard/services/auth_service.dart';
 import 'package:route_guard/services/connectivity_service.dart';
 import 'package:route_guard/services/local_cache_service.dart';
 import 'package:route_guard/services/synchronized_database_service.dart';
@@ -20,6 +21,7 @@ final class ServiceLocator {
   late final LocalCacheService localCacheService;
   late final SynchronizedDatabaseService synchronizedDatabaseService;
   late final DatabaseService databaseService; // Keep original for direct access if needed
+  late final AuthService authService;
   late final LocationService locationService;
   late final NotificationService notificationService;
   late final ProximityNotificationService proximityNotificationService;
@@ -34,6 +36,7 @@ final class ServiceLocator {
       connectivityService,
     );
     databaseService = DatabaseService();
+    authService = AuthService();
     locationService = LocationService();
     notificationService = NotificationService();
     proximityNotificationService = ProximityNotificationService();

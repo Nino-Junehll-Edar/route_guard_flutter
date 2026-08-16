@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "D:/random/route_guard/linux"
+    "cmake.sourceDirectory": "D:/random/route_guard/linux",
+    "java.configuration.updateBuildConfiguration": "disabled"
 }

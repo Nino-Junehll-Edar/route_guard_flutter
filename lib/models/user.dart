@@ -9,6 +9,7 @@ class UserProfile {
   final DateTime? approvedAt;
   final String? approvedBy;
   final DateTime createdAt;
+  final String platform; // 'mobile' or 'web' to distinguish account origins
 
   UserProfile({
     required this.id,
@@ -21,6 +22,7 @@ class UserProfile {
     this.approvedAt,
     this.approvedBy,
     required this.createdAt,
+    required this.platform, // 'mobile' or 'web'
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class UserProfile {
       approvedAt: json['approved_at'] != null ? DateTime.parse(json['approved_at'] as String) : null,
       approvedBy: json['approved_by'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
+      platform: json['platform'] as String? ?? 'mobile', // Default to mobile for backward compatibility
     );
   }
 
@@ -50,6 +53,7 @@ class UserProfile {
       'approved_at': approvedAt?.toIso8601String(),
       'approved_by': approvedBy,
       'created_at': createdAt.toIso8601String(),
+      'platform': platform,
     };
   }
 }

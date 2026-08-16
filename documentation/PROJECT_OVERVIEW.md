@@ -17,17 +17,18 @@ RouteGuard is a Flutter-based mobile and web application designed for community-
 
 ## Architecture Overview
 RouteGuard follows a clean architecture pattern with separation of concerns:
-- **Presentation Layer**: UI screens (login, signup, map, profile, etc.)
-- **Domain Layer**: Models (Hazard, UserProfile) and business logic
-- **Data Layer**: Services for authentication, database, storage, realtime updates, etc.
-- **Infrastructure**: Supabase backend, local caching, connectivity monitoring
+- **Presentation Layer**: UI screens (mobile: login, signup, map, profile; web: agency dashboard, request access)
+- **Domain Layer**: Models (Hazard, UserProfile) and business logic (status calculation, reputation system)
+- **Data Layer**: Services for authentication, database, storage, realtime updates, location, notifications, and offline synchronization
+- **Infrastructure**: Supabase backend (PostgreSQL, Auth, Storage, Realtime, Edge Functions), local caching, connectivity monitoring, service locator
 
 The application uses:
 - **Flutter/Dart** for cross-platform UI (mobile & web)
 - **Supabase** as backend (PostgreSQL, Auth, Storage, Realtime, Edge Functions)
-- **Service Locator Pattern** for dependency injection
-- **Offline-first** architecture with synchronization
-- **Row Level Security (RLS)** for data protection
+- **Service Locator Pattern** for centralized dependency injection
+- **Offline-first** architecture with synchronization for unreliable connectivity
+- **Row Level Security (RLS)** for data protection at the database level
+- **Performance Monitoring** instrumentation for tracking operation durations
 
 ## Key Features
 1. **User Authentication**: Email/password sign up/sign in via Supabase Auth

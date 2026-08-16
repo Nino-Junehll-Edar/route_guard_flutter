@@ -11,27 +11,34 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+node_modules/
 
-# IntelliJ related
+# IDEs and editors
+.idea/
 *.iml
 *.ipr
 *.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+.vscode/
+# Uncomment to track VS Code workspace settings (recommended for team projects)
+#.vscode/settings.json
+#.vscode/tasks.json
+#.vscode/launch.json
+#.vscode/extensions.json
+# Ignore user-specific workspace settings
+.vscode/*code-workspace*
 
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
-.pub-cache/
 .pub/
-/build/
+.pub-cache/
+.build/
 /coverage/
+/web-compiler/
+.lib-dart/
 
 # Environment variables and secrets
 .env
@@ -57,13 +64,53 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
+# Build output directories - platform specific
 /android/app/debug
 /android/app/profile
 /android/app/release
+/ios/Flutter/
+/ios/Flutter/Release*/
+/macos/Flutter/
+/macos/Flutter/Release*/
+/windows/flutter/
+/windows/flutter/Release*/
+/linux/flutter/
+/linux/flutter/Release*/
 
+# Generated files - OS specific
+**/Flutter/GeneratedPluginRegistrant*
+**/flutter/generated_plugin_registrant*
+**/flutter/generated_plugins*
+**/flutter/generated_plugin_registrant.h
+**/flutter/generated_plugins.cmake
+**/Flutter/GeneratedPluginRegistrant.h
+**/Flutter/generated_plugin_registrant.cc
+
+# User-specific and temporary files
+CLAUDE.md
+2026-08-16.md
+.gitattributes
+
+# Graphify generated output
+graphify-out/
+
+# Package files
+.packages
+*.treebeat
+${PROJECT_NAME}.gbridge
+
+# Firebase
 .firebase
-.agents
-.claude
+.firebaserc
 
-/node_modules
+# Claude agent files
+.agents
+.claude/
+
+# Obsidian
+.obsidian
+
+# Logs
+*.log
+
+/build

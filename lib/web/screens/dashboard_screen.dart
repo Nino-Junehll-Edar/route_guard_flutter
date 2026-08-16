@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:route_guard/services/auth_service.dart';
 import 'package:route_guard/services/database_service.dart';
-import 'package:route_guard/models/hazard.dart';
 import 'package:route_guard/models/user.dart';
+import 'pending_requests_tab.dart';
+import 'advisories_tab.dart';
+import 'moderation_tab.dart';
+import 'analytics_tab.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,8 +19,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   final DatabaseService _databaseService = DatabaseService();
   late final TabController _tabController;
 
+  UserProfile? _userProfile;
   bool _isLoading = true;
   String? _error;
+  bool _isAgencyOfficial = false;
 
   @override
   void initState() {
@@ -39,15 +44,42 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
 
     try {
-      await Future.wait([
-        _databaseService.getPendingAgencyRequests(),
-        _databaseService.getHazardsForModeration(),
-        _databaseService.getOfficialAdvisories(),
-        _databaseService.getHazards(),
-      ]);
+      // Get current user ID from Supabase
+      final userId = _databaseService.supabase.auth.currentUser?.id;
+      if (userId == null) {
+        setState(() {
+          _isLoading = false;
+          _error = 'User not authenticated';
+        });
+        return;
+      }
 
+      // Load user profile to check agency status
+      final profile = await _databaseService.getUserProfile(userId);
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _userProfile = profile;
+          _isAgencyOfficial = profile != null &&
+              profile.agency != null &&
+              profile.agency!.isNotEmpty &&
+              profile.role != null &&
+              profile.role!.isNotEmpty &&
+              profile.approvalStatus == 'approved';
+          _isLoading = false;
+        });
+      }
+
+      // Load dashboard data only if user is agency official
+      if (_isAgencyOfficial && mounted) {
+        await Future.wait([
+          _databaseService.getPendingAgencyRequests(),
+          _databaseService.getHazardsForModeration(),
+          _databaseService.getOfficialAdvisories(),
+          _databaseService.getHazards(),
+        ]);
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -73,20 +105,210 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  // Helper method to determine if user can manage agency requests (admin role)
+  bool _canManageAgencyRequests() {
+    return _userProfile?.role?.toLowerCase() == 'admin' ||
+        _userProfile?.role?.toLowerCase() == 'administrator';
+  }
+
+  // Helper method to determine if user can create/edit advisories
+  bool _canManageAdvisories() {
+    final role = _userProfile?.role?.toLowerCase();
+    return role == 'admin' ||
+        role == 'administrator' ||
+        role == 'moderator';
+  }
+
+  // Helper method to determine if user can moderate hazards
+  bool _canModerateHazards() {
+    final role = _userProfile?.role?.toLowerCase();
+    return role == 'admin' ||
+        role == 'administrator' ||
+        role == 'moderator';
+  }
+
   @override
   Widget build(BuildContext context) {
+    // If not authenticated, redirect to login
+    if (_databaseService.supabase.auth.currentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // If not agency official, show access denied message
+    if (!_isAgencyOfficial) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Access Denied'),
+          automaticallyImplyLeading: false,
+          backgroundColor: Color(0xFF1E3A8A),
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.security,
+                  size: 64,
+                  color: Colors.red,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Access Denied',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'You do not have permission to access the agency dashboard.\n'
+                  'Please contact your agency administrator to request access.',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.black54,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton(
+                  onPressed: _logout,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF1E3A8A),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Logout'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Agency Dashboard'),
+        title: Text('Agency Dashboard'),
+        backgroundColor: Color(0xFF1E3A8A),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(52.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                color: Color(0xFF6B7280).withValues(alpha: 0.2),
+                height: 4.0,
+              ),
+              TabBar(
+                controller: _tabController,
+                indicator: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Colors.white,
+                      width: 3,
+                    ),
+                  ),
+                ),
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                labelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                indicatorSize: TabBarIndicatorSize.label,
+                indicatorPadding: const EdgeInsets.symmetric(horizontal: 12.0),
+                dividerColor: Colors.transparent,
+                tabs: [
+                  if (_canManageAgencyRequests())
+                    const Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.list_alt, size: 18, color: Color(0xFF93C5FD)),
+                          SizedBox(width: 6),
+                          Text('Requests', style: TextStyle(color: Color(0xFFDBEAFE))),
+                        ],
+                      ),
+                    ),
+                  if (_canManageAdvisories())
+                    const Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.announcement, size: 18, color: Color(0xFFFDE68A)),
+                          SizedBox(width: 6),
+                          Text('Advisories', style: TextStyle(color: Color(0xFFFEF3C7))),
+                        ],
+                      ),
+                    ),
+                  if (_canModerateHazards())
+                    const Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.shield, size: 18, color: Color(0xFF86EFAC)),
+                          SizedBox(width: 6),
+                          Text('Moderation', style: TextStyle(color: Color(0xFFDCFCE7))),
+                        ],
+                      ),
+                    ),
+                  const Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.analytics, size: 18, color: Color(0xFFC4B5FD)),
+                        SizedBox(width: 6),
+                        Text('Analytics', style: TextStyle(color: Color(0xFFEDE9FE))),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
         actions: [
+          // Display agency info
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: Text(
+                '${_userProfile?.agency ?? 'Unknown Agency'} • ${_userProfile?.role ?? 'Unknown Role'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadDashboardData,
             tooltip: 'Refresh Data',
+            color: Colors.white,
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle),
             tooltip: 'Account',
+            color: Colors.white,
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'profile',
@@ -104,712 +326,34 @@ class _DashboardScreenState extends State<DashboardScreen>
             },
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: [
-            Tab(text: 'Requests'),
-            Tab(text: 'Advisories'),
-            Tab(text: 'Moderation'),
-            Tab(text: 'Analytics'),
-          ],
-        ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E3A8A)))
           : _error != null
               ? Center(
                   child: Text(
                     'Error: $_error',
-                    style: const TextStyle(color: Colors.red),
+                    style: TextStyle(color: Colors.red),
                   ),
                 )
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _PendingRequestsTab(),
-                    _AdvisoriesTab(),
-                    _ModerationTab(),
-                    _AnalyticsTab(),
-                  ],
-                ),
-    );
-  }
-}
-
-class _PendingRequestsTab extends StatefulWidget {
-  const _PendingRequestsTab();
-
-  @override
-  State<_PendingRequestsTab> createState() => _PendingRequestsTabState();
-}
-
-class _PendingRequestsTabState extends State<_PendingRequestsTab> {
-  final DatabaseService _databaseService = DatabaseService();
-  List<UserProfile> _pendingRequests = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRequests();
-  }
-
-  Future<void> _loadRequests() async {
-    setState(() => _isLoading = true);
-    try {
-      final requests = await _databaseService.getPendingAgencyRequests();
-      if (mounted) {
-        setState(() {
-          _pendingRequests = requests;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _approveRequest(String userId) async {
-    await _databaseService.approveAgencyRequest(userId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agency request approved!')),
-      );
-      await _loadRequests();
-    }
-  }
-
-  Future<void> _rejectRequest(String userId) async {
-    await _databaseService.rejectAgencyRequest(userId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agency request rejected.')),
-      );
-      await _loadRequests();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_pendingRequests.isEmpty) {
-      return const Center(
-        child: Text('No pending agency requests'),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: _pendingRequests.length,
-      itemBuilder: (context, index) {
-        final request = _pendingRequests[index];
-        return Card(
-          margin: const EdgeInsets.all(8),
-          child: ListTile(
-            leading: const Icon(Icons.person_add, color: Colors.blue),
-            title: Text(request.email),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (request.agency != null && request.agency!.isNotEmpty)
-                  Text('Agency: ${request.agency}', style: const TextStyle(fontSize: 12)),
-                if (request.role != null && request.role!.isNotEmpty)
-                  Text('Role: ${request.role}', style: const TextStyle(fontSize: 12)),
-                Text('Requested: ${request.createdAt.toLocal().toString().split('.')[0]}'),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => _approveRequest(request.id),
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Approve', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                ElevatedButton.icon(
-                  onPressed: () => _rejectRequest(request.id),
-                  icon: const Icon(Icons.close, size: 18),
-                  label: const Text('Reject', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AdvisoriesTab extends StatefulWidget {
-  const _AdvisoriesTab();
-
-  @override
-  State<_AdvisoriesTab> createState() => _AdvisoriesTabState();
-}
-
-class _AdvisoriesTabState extends State<_AdvisoriesTab> {
-  final DatabaseService _databaseService = DatabaseService();
-  List<Map<String, dynamic>> _officialAdvisories = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAdvisories();
-  }
-
-  Future<void> _loadAdvisories() async {
-    setState(() => _isLoading = true);
-    try {
-      final advisories = await _databaseService.getOfficialAdvisories();
-      if (mounted) {
-        setState(() {
-          _officialAdvisories = advisories;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _createAdvisory() async {
-    // TODO: Implement advisory creation dialog
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Advisory creation feature coming soon!')),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_officialAdvisories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.info_outline, size: 48, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('No official advisories yet'),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _createAdvisory,
-              child: const Text('Create First Advisory'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: _officialAdvisories.length,
-      itemBuilder: (context, index) {
-        final advisory = _officialAdvisories[index];
-        return Card(
-          margin: const EdgeInsets.all(8),
-          child: ListTile(
-            leading: const Icon(Icons.announcement, color: Colors.orange),
-            title: Text(
-              advisory['hazard_type'] ?? 'Unknown Hazard',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(advisory['description'] ?? 'No description'),
-                const SizedBox(height: 4),
-                Text(
-                  'Valid: ${advisory['valid_from']?.toString().split('T')[0] ?? 'N/A'} to ${advisory['valid_until']?.toString().split('T')[0] ?? 'N/A'}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                Text(
-                  'By: ${advisory['created_by'] ?? 'Unknown'}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            ),
-            trailing: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Edit Advisory'),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Delete Advisory'),
-                ),
-              ],
-              onSelected: (value) async {
-                if (value == 'edit') {
-                  // TODO: Implement edit advisory
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Edit advisory coming soon!')),
-                  );
-                } else if (value == 'delete') {
-                  // TODO: Implement delete advisory
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Delete advisory coming soon!')),
-                  );
-                }
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ModerationTab extends StatefulWidget {
-  const _ModerationTab();
-
-  @override
-  State<_ModerationTab> createState() => _ModerationTabState();
-}
-
-class _ModerationTabState extends State<_ModerationTab> {
-  final DatabaseService _databaseService = DatabaseService();
-  List<Map<String, dynamic>> _hazardsForModeration = []; // Contains hazard + moderation_queue data
-  bool _isLoading = true;
-  String? _agencyOfficialId; // To store the agency official's user ID
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchAgencyOfficialId();
-  }
-
-  Future<void> _fetchAgencyOfficialId() async {
-    try {
-      final user = _databaseService.supabase.auth.currentUser;
-      if (user != null && mounted) {
-        setState(() {
-          _agencyOfficialId = user.id;
-        });
-        await _loadHazards();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadHazards() async {
-    setState(() => _isLoading = true);
-    try {
-      final hazards = await _databaseService.getHazardsForModeration();
-      if (mounted) {
-        setState(() {
-          _hazardsForModeration = hazards;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _moderateHazard(String moderationQueueId, String outcome) async {
-    if (_agencyOfficialId == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Agency official ID not available')),
-        );
-      }
-      return;
-    }
-    try {
-      await _databaseService.reviewModerationQueue(
-        moderationQueueId,
-        _agencyOfficialId!,
-        outcome
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hazard marked as $outcome')),
-        );
-        await _loadHazards();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to moderate hazard: $e')),
-        );
-      }
-    }
-  }
-
-  IconData _getHazardIcon(String hazardType) {
-    switch (hazardType.toLowerCase()) {
-      case 'flood':
-        return Icons.water_drop;
-      case 'landslide':
-        return Icons.terrain;
-      case 'earthquake':
-        return Icons.landscape;
-      case 'fire':
-        return Icons.fire_truck;
-      case 'accident':
-        return Icons.car_crash;
-      case 'debris':
-        return Icons.construction;
-      default:
-        return Icons.warning;
-    }
-  }
-
-  Color _getHazardColor(HazardStatus status) {
-    switch (status) {
-      case HazardStatus.impassable:
-        return Colors.red;
-      case HazardStatus.partial:
-        return Colors.orange;
-      case HazardStatus.clear:
-        return Colors.green;
-      case HazardStatus.uncertain:
-        return Colors.grey;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_hazardsForModeration.isEmpty) {
-      return const Center(
-        child: Text('No hazards pending moderation'),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: _hazardsForModeration.length,
-      itemBuilder: (context, index) {
-        final hazardData = _hazardsForModeration[index];
-        // Extract hazard data (excluding the moderation_queue field)
-        final hazardJson = Map<String, dynamic>.from(hazardData);
-        hazardJson.remove('moderation_queue');
-        final hazard = Hazard.fromJson(hazardJson);
-        final moderationQueueId = hazardData['moderation_queue']['id'] as String;
-
-        return Card(
-          margin: const EdgeInsets.all(8),
-          child: ExpansionTile(
-            leading: Icon(
-              _getHazardIcon(hazard.hazardType),
-              color: _getHazardColor(hazard.status),
-              size: 32,
-            ),
-            title: Text(hazard.hazardType),
-            subtitle: Text(
-              'Status: ${hazard.status.toString().split('.').last} | Confidence: ${hazard.confidence}%',
-              style: const TextStyle(fontSize: 12),
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (hazard.description != null && hazard.description!.isNotEmpty) ...[
-                      Text(
-                        'Description:',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(hazard.description!),
-                    ],
-                    const SizedBox(height: 12),
-                    Text(
-                      'Location: ${hazard.location.latitude.toStringAsFixed(6)}, ${hazard.location.longitude.toStringAsFixed(6)}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    if (hazard.photoUrl != null && hazard.photoUrl!.isNotEmpty) ...[
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              : _userProfile == null
+                  ? const Center(child: Text('Profile not found'))
+                  : RefreshIndicator(
+                      onRefresh: _loadDashboardData,
+                      child: TabBarView(
+                        controller: _tabController,
                         children: [
-                          const SizedBox(height: 8),
-                          Text(
-                            'Photo:',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Image.network(
-                            hazard.photoUrl!,
-                            width: 200,
-                            height: 150,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.broken_image, size: 100),
-                          ),
+                          // Only show tabs that the user has access to
+                          if (_canManageAgencyRequests())
+                            const PendingRequestsTab(),
+                          if (_canManageAdvisories())
+                            const AdvisoriesTab(),
+                          if (_canModerateHazards())
+                            const ModerationTab(),
+                          const AnalyticsTab(),
                         ],
                       ),
-                    ],
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () => _moderateHazard(moderationQueueId, 'confirmed'),
-                          icon: const Icon(Icons.check_circle, size: 20),
-                          label: const Text('Confirm'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () => _moderateHazard(moderationQueueId, 'false'),
-                          icon: const Icon(Icons.cancel, size: 20),
-                          label: const Text('Mark as False'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () => _moderateHazard(moderationQueueId, 'inconclusive'),
-                          icon: const Icon(Icons.help_outline, size: 20),
-                          label: const Text('Inconclusive'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                          ),
-                        ),
-                      ],
                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
-
-class _AnalyticsTab extends StatefulWidget {
-  const _AnalyticsTab();
-
-  @override
-  State<_AnalyticsTab> createState() => _AnalyticsTabState();
-}
-
-class _AnalyticsTabState extends State<_AnalyticsTab> {
-  final DatabaseService _databaseService = DatabaseService();
-  int _totalHazards = 0;
-  int _pendingHazards = 0;
-  int _confirmedHazards = 0;
-  int _rejectedHazards = 0;
-  List<Hazard> _allHazards = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadStatistics();
-  }
-
-  Future<void> _loadStatistics() async {
-    setState(() => _isLoading = true);
-    try {
-      final hazards = await _databaseService.getHazards();
-      if (mounted) {
-        setState(() {
-          _totalHazards = hazards.length;
-          _pendingHazards = hazards.where((h) => h.status == HazardStatus.uncertain).length;
-          _confirmedHazards = hazards.where((h) => h.status == HazardStatus.clear).length;
-          _rejectedHazards = hazards.where((h) => h.status == HazardStatus.impassable).length;
-          _allHazards = hazards;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Widget _buildStatCard(String label, String value, IconData icon) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SizedBox(
-          width: 140,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 32, color: Colors.blue),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _getHazardIcon(String hazardType) {
-    switch (hazardType.toLowerCase()) {
-      case 'flood':
-        return Icons.water_drop;
-      case 'landslide':
-        return Icons.terrain;
-      case 'earthquake':
-        return Icons.landscape;
-      case 'fire':
-        return Icons.fire_truck;
-      case 'accident':
-        return Icons.car_crash;
-      case 'debris':
-        return Icons.construction;
-      default:
-        return Icons.warning;
-    }
-  }
-
-  Color _getHazardColor(HazardStatus status) {
-    switch (status) {
-      case HazardStatus.impassable:
-        return Colors.red;
-      case HazardStatus.partial:
-        return Colors.orange;
-      case HazardStatus.clear:
-        return Colors.green;
-      case HazardStatus.uncertain:
-        return Colors.grey;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final recentHazards = _allHazards.length > 5 ? _allHazards.sublist(_allHazards.length - 5) : _allHazards;
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Wrap(
-          spacing: 16,
-          runSpacing: 16,
-          children: [
-            SizedBox(
-              width: 180,
-              child: _buildStatCard('Total Hazards', _totalHazards.toString(), Icons.warning),
-            ),
-            SizedBox(
-              width: 180,
-              child: _buildStatCard('Pending Review', _pendingHazards.toString(), Icons.pending_actions),
-            ),
-            SizedBox(
-              width: 180,
-              child: _buildStatCard('Confirmed', _confirmedHazards.toString(), Icons.check_circle),
-            ),
-            SizedBox(
-              width: 180,
-              child: _buildStatCard('Marked as False/Impassable', _rejectedHazards.toString(), Icons.error),
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
-        const Text(
-          'Hazard Trends',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          height: 200,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Text(
-              'Charts and visualizations coming soon\n(Hazard trends over time, type distribution, etc.)',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Recent Activity',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        if (recentHazards.isEmpty)
-          const Text('No hazard activity yet')
-        else
-          ...recentHazards.reversed.map((hazard) {
-            return ListTile(
-              leading: Icon(
-                _getHazardIcon(hazard.hazardType),
-                color: _getHazardColor(hazard.status),
-              ),
-              title: Text(hazard.hazardType),
-              subtitle: Text(
-                '${hazard.status.toString().split('.').last} | ${hazard.confidence}% confidence',
-                style: const TextStyle(fontSize: 12),
-              ),
-              trailing: Text(
-                hazard.timestamp.toLocal().toString().split('.')[0],
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            );
-          }),
-      ],
-    );
-  }
-}
-

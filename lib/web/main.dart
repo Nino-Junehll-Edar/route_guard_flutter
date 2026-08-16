@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:route_guard/supabase_options.dart';
+import 'package:route_guard/web/theme.dart';
 import 'package:route_guard/web/screens/request_access_screen.dart';
 import 'package:route_guard/web/screens/dashboard_screen.dart';
+import 'package:route_guard/web/screens/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,13 +37,11 @@ class AgencyWebApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'RouteGuard Agency Dashboard',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
       initialRoute: '/',
       routes: {
         '/': (context) => const RequestAccessScreen(),
+        '/login': (context) => const LoginScreen(),
         '/dashboard': (context) => const DashboardScreen(),
       },
     );
