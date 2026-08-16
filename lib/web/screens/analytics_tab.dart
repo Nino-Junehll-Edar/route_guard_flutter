@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:route_guard/services/database_service.dart';
 import 'package:route_guard/models/hazard.dart';
 import 'package:route_guard/web/theme.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 
 class AnalyticsTab extends StatefulWidget {
   const AnalyticsTab({super.key});
@@ -10,7 +12,7 @@ class AnalyticsTab extends StatefulWidget {
   State<AnalyticsTab> createState() => _AnalyticsTabState();
 }
 
-class _AnalyticsTabState extends State<AnalyticsTab> {
+class _AnalyticsTabState extends State<AnalyticsTab> with SingleTickerProviderStateMixin {
   final DatabaseService _databaseService = DatabaseService();
   int _totalHazards = 0;
   int _pendingHazards = 0;
@@ -18,11 +20,25 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   int _rejectedHazards = 0;
   List<Hazard> _allHazards = [];
   bool _isLoading = true;
+  late final AnimationController _animationController;
+  late final Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_animationController);
+    _animationController.forward();
     _loadStatistics();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadStatistics() async {
@@ -43,6 +59,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _showErrorSnackBar('Failed to load statistics: $e');
         });
       }
     }
@@ -83,7 +100,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
+      return const _AnalyticsSkeletonLoader();
     }
 
     final recentHazards = _allHazards.length > 5 ? _allHazards.sublist(_allHazards.length - 5) : _allHazards;
@@ -109,7 +126,6 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         // Hazard Trends Section
         _buildSectionHeader('Hazard Trends'),
         Container(
-          height: 220,
           margin: const EdgeInsets.only(bottom: 24.0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -126,17 +142,37 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Center(
-              child: Text(
-                'Charts and visualizations coming soon\n(Hazard trends over time, type distribution, etc.)',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppTheme.textSecondaryColor,
-                  fontSize: 16,
-                  height: 1.5,
-                ),
-              ),
-            ),
+            child: _allHazards.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No hazard data available',
+                      style: TextStyle(
+                        color: AppTheme.textSecondaryColor,
+                        fontSize: 16,
+                      ),
+                    ),
+                  )
+                : SizedBox(
+                    height: 300,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: PieChart(
+                        PieChartData(
+                          pieTouchData: PieTouchData(
+                            touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                              // Handle touch events for interactive pie chart
+                            },
+                          ),
+                          borderData: FlBorderData(
+                            show: false,
+                          ),
+                          sectionsSpace: 4,
+                          centerSpaceRadius: 40,
+                          sections: _buildHazardTypeSections(),
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ),
 
@@ -166,54 +202,69 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   Widget _buildEnhancedStatCard(String label, String value, IconData icon, Color color) {
     return SizedBox(
       width: 160,
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24.0),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: color.withValues(alpha: 0.2),
-              width: 1,
+      child: MouseRegion(
+        onEnter: (_) => _animationController.forward(from: 0.0),
+        onExit: (_) => _animationController.reverse(),
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                // Add haptic feedback or visual feedback on tap
+                HapticFeedback.lightImpact();
+              },
+              child: Container(
+                padding: const EdgeInsets.all(24.0),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                  color: color.withValues(alpha: 0.02),
                 ),
-                child: Icon(
-                  icon,
-                  size: 28,
-                  color: color,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        icon,
+                        size: 28,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.textSecondaryColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.textSecondaryColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -235,6 +286,296 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   }
 
   Widget _buildHazardItem(Hazard hazard) {
+    return MouseRegion(
+      onEnter: (_) => HapticFeedback.lightImpact(),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              HapticFeedback.mediumImpact();
+            },
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(20.0),
+              leading: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _getHazardColor(hazard.status).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _getHazardIcon(hazard.hazardType),
+                  color: _getHazardColor(hazard.status),
+                  size: 24,
+                ),
+              ),
+              title: Text(
+                hazard.hazardType,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimaryColor,
+                ),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  Text(
+                    '${hazard.status.toString().split('.').last} | ${hazard.confidence}% confidence',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textSecondaryColor,
+                    ),
+                  ),
+                ],
+              ),
+              trailing: Text(
+                hazard.timestamp.toLocal().toString().split('.')[0],
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondaryColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<PieChartSectionData> _buildHazardTypeSections() {
+    // Count hazards by type
+    Map<String, int> hazardTypeCounts = {};
+    for (var hazard in _allHazards) {
+      String type = hazard.hazardType;
+      hazardTypeCounts[type] = (hazardTypeCounts[type] ?? 0) + 1;
+    }
+
+    // Convert to sections
+    List<PieChartSectionData> sections = [];
+    int total = _allHazards.length;
+
+    hazardTypeCounts.forEach((type, count) {
+      double percentage = (count / total) * 100;
+      return sections.add(
+        PieChartSectionData(
+          value: count.toDouble(),
+          title: '$type\n${percentage.toStringAsFixed(1)}%',
+          radius: 60,
+          titleStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          color: _getHazardTypeColor(type),
+          badgeWidget: Container(
+            alignment: Alignment.center,
+            child: Text(
+              '${percentage.toStringAsFixed(1)}%',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          badgePositionPercentageOffset: 1.4,
+        ),
+      );
+    });
+
+    return sections;
+  }
+
+  Color _getHazardTypeColor(String hazardType) {
+    switch (hazardType.toLowerCase()) {
+      case 'flood':
+        return Colors.blue;
+      case 'landslide':
+        return Colors.brown;
+      case 'earthquake':
+        return Colors.grey;
+      case 'fire':
+        return Colors.red;
+      case 'accident':
+        return Colors.orange;
+      case 'debris':
+        return Colors.grey;
+      default:
+        return Colors.purple;
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+}
+
+class _AnalyticsSkeletonLoader extends StatelessWidget {
+  const _AnalyticsSkeletonLoader();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24.0),
+      children: [
+        // Stats Cards Section - Skeleton
+        Padding(
+          padding: const EdgeInsets.only(bottom: 32.0),
+          child: Wrap(
+            spacing: 24.0,
+            runSpacing: 24.0,
+            children: List.generate(4, (_) => _buildSkeletonStatCard()),
+          ),
+        ),
+
+        // Hazard Trends Section - Skeleton
+        _buildSkeletonSectionHeader('Hazard Trends'),
+        Container(
+          margin: const EdgeInsets.only(bottom: 24.0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: AspectRatio(
+                aspectRatio: 1.5,
+                child: _buildSkeletonChart(),
+              ),
+            ),
+          ),
+        ),
+
+        // Recent Activity Section - Skeleton
+        _buildSkeletonSectionHeader('Recent Activity'),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemCount: 3,
+          itemBuilder: (context, index) => _buildSkeletonHazardItem(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonStatCard() {
+    return SizedBox(
+      width: 160,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(24.0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppTheme.borderColor.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: AppTheme.textPrimaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: AppTheme.textSecondaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Container(
+        width: double.infinity,
+        height: 20,
+        decoration: BoxDecoration(
+          color: AppTheme.textPrimaryColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonChart() {
+    return SizedBox(
+      height: 200,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.textPrimaryColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonHazardItem() {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -257,41 +598,32 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: _getHazardColor(hazard.status).withValues(alpha: 0.1),
+              color: AppTheme.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              _getHazardIcon(hazard.hazardType),
-              color: _getHazardColor(hazard.status),
-              size: 24,
+          ),
+          title: Container(
+            width: double.infinity,
+            height: 16,
+            decoration: BoxDecoration(
+              color: AppTheme.textPrimaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
-          title: Text(
-            hazard.hazardType,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimaryColor,
+          subtitle: Container(
+            width: double.infinity,
+            height: 12,
+            decoration: BoxDecoration(
+              color: AppTheme.textSecondaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 4),
-              Text(
-                '${hazard.status.toString().split('.').last} | ${hazard.confidence}% confidence',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textSecondaryColor,
-                ),
-              ),
-            ],
-          ),
-          trailing: Text(
-            hazard.timestamp.toLocal().toString().split('.')[0],
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppTheme.textSecondaryColor,
+          trailing: Container(
+            width: 40,
+            height: 12,
+            decoration: BoxDecoration(
+              color: AppTheme.textSecondaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
         ),
