@@ -16,8 +16,11 @@ class DatabaseService {
           .from('user_profiles')
           .select()
           .eq('id', userId)
-          .single();
+          .maybeSingle();
 
+      if (response == null) {
+        return null;
+      }
       return UserProfile.fromJson(response);
     });
   }
@@ -43,10 +46,7 @@ class DatabaseService {
           .eq('approval_status', 'pending')
           .order('created_at', ascending: false);
 
-      // Ensure response is a List before casting
-      if (response == null) return [];
-      final List<dynamic> responseList = response as List<dynamic>;
-      return responseList
+      return response
           .whereType<Map<String, dynamic>>()
           .map((json) => UserProfile.fromJson(json))
           .toList();
@@ -101,10 +101,7 @@ class DatabaseService {
 
       final response = await limitedQuery;
 
-      // Ensure response is a List before casting
-      if (response == null) return [];
-      final List<dynamic> responseList = response as List<dynamic>;
-      return responseList
+      return response
           .whereType<Map<String, dynamic>>()
           .map((json) => Hazard.fromJson(json))
           .toList();
@@ -155,13 +152,10 @@ class DatabaseService {
       final response = await _supabase
           .from('hazards_with_geom')
           .select('*, moderation_queue!inner(id, reviewed_by, reviewed_at, outcome)')
-          .in_('status', ['uncertain']) // Could expand to include other statuses that need review
+          .inFilter('status', ['uncertain']) // Could expand to include other statuses that need review
           .order('timestamp', ascending: false);
 
-      // Ensure response is a List before casting
-      if (response == null) return [];
-      final List<dynamic> responseList = response as List<dynamic>;
-      return responseList
+      return response
           .whereType<Map<String, dynamic>>()
           .map((json) => json)
           .toList();
@@ -194,10 +188,8 @@ class DatabaseService {
   Future<List<Map<String, dynamic>>> getOfficialAdvisories() async {
     return _perfService.logDurationWithResult<List<Map<String, dynamic>>>('GetOfficialAdvisories', () async {
       final response = await _supabase.from('official_advisories_with_geom').select('*');
-      // Ensure response is a List before casting
-      if (response == null) return [];
-      final List<dynamic> responseList = response as List<dynamic>;
-      return responseList
+
+      return response
           .whereType<Map<String, dynamic>>()
           .toList();
     });

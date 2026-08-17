@@ -4,18 +4,30 @@ import 'package:route_guard/models/hazard.dart';
 import 'package:route_guard/services/service_locator.dart';
 import 'package:route_guard/services/location_service.dart';
 import 'package:route_guard/services/synchronized_database_service.dart';
+import 'package:route_guard/services/osm_service.dart';
 import 'package:route_guard/routing/astar.dart';
+import 'package:route_guard/routing/graph_astar.dart';
+import 'package:route_guard/routing/hazard_integrator.dart';
+import 'package:route_guard/routing/road_graph.dart';
 
 /// Service for calculating routes that avoid hazards using A* algorithm
 class RouteCalculator {
   late final SynchronizedDatabaseService _databaseService;
   late final LocationService _locationService;
-  final AStar _astar = AStar();
+  late final OsmService _osmService;
+  late final RoadGraph _roadGraph;
+  late final HazardIntegrator _hazardIntegrator;
+  late final GraphAStar _graphAStar;
+  final AStar _legacyAstar = AStar(); // Keep for fallback
 
   RouteCalculator() {
     final locator = ServiceLocator();
     _databaseService = locator.synchronizedDatabaseService;
     _locationService = locator.locationService;
+    _osmService = OsmService(locator.localCacheService);
+    _roadGraph = RoadGraph();
+    _hazardIntegrator = HazardIntegrator();
+    _graphAStar = GraphAStar();
   }
 
   /// Calculate a route from current location to destination avoiding hazards
@@ -37,8 +49,8 @@ class RouteCalculator {
         return status == HazardStatus.impassable || status == HazardStatus.partial;
       }).toList();
 
-      // Calculate route avoiding hazards
-      return _astar.findPath(
+      // Calculate route avoiding hazards using OSM-based routing
+      return _calculateRouteWithOsm(
         start: start,
         end: destination,
         hazards: activeHazards,
@@ -66,8 +78,8 @@ class RouteCalculator {
         return status == HazardStatus.impassable || status == HazardStatus.partial;
       }).toList();
 
-      // Calculate route avoiding hazards
-      return _astar.findPath(
+      // Calculate route avoiding hazards using OSM-based routing
+      return _calculateRouteWithOsm(
         start: start,
         end: end,
         hazards: activeHazards,
@@ -75,6 +87,72 @@ class RouteCalculator {
     } catch (e) {
       // print('Error calculating route between points: $e');
       return [start, end]; // Return direct path as fallback
+    }
+  }
+
+  /// Calculate a route using OSM-based routing with hazard avoidance
+  Future<List<LatLng>> _calculateRouteWithOsm({
+    required LatLng start,
+    required LatLng end,
+    required List<Hazard> hazards,
+  }) async {
+    try {
+      // Get OSM data for the area between start and end points
+      final OsmData osmData = await _osmService.fetchOsmDataForBounds(
+        start: start,
+        end: end,
+      );
+
+      // Build the road graph from OSM data
+      _roadGraph.buildFromOsmData(osmData);
+
+      // Apply hazard penalties to the graph
+      _hazardIntegrator.applyHazardsToGraph(_roadGraph, hazards);
+
+      // Find nearest graph nodes to start and end points
+      final GraphNode? startNode = _roadGraph.getNearestNode(
+        start,
+        maxDistance: 100.0, // 100m maximum walk to road
+      );
+      final GraphNode? endNode = _roadGraph.getNearestNode(
+        end,
+        maxDistance: 100.0,
+      );
+
+      // If we can't connect to the road network, fall back to geometric A*
+      if (startNode == null || endNode == null) {
+        // Fall back to legacy geometric A* algorithm
+        return _legacyAstar.findPath(
+          start: start,
+          end: end,
+          hazards: hazards,
+        );
+      }
+
+      // Find path using graph-based A*
+      final List<LatLng> graphPath = _graphAStar.findPath(
+        start: start,
+        end: end,
+        graph: _roadGraph,
+      );
+
+      // If graph-based routing failed to find a path, fall back to geometric A*
+      if (graphPath.length <= 1) {
+        return _legacyAstar.findPath(
+          start: start,
+          end: end,
+          hazards: hazards,
+        );
+      }
+
+      return graphPath;
+    } catch (e) {
+      // If OSM-based routing fails, fall back to geometric A*
+      return _legacyAstar.findPath(
+        start: start,
+        end: end,
+        hazards: hazards,
+      );
     }
   }
 
@@ -93,8 +171,8 @@ class RouteCalculator {
       return status == HazardStatus.impassable || status == HazardStatus.partial;
     }).toList();
 
-    // Calculate initial route
-    final initialRoute = _astar.findPath(
+    // Calculate initial route using OSM-based routing
+    final initialRoute = await _calculateRouteWithOsm(
       start: start,
       end: destination,
       hazards: activeHazards,
@@ -116,7 +194,7 @@ class RouteCalculator {
               DateTime.now().difference(lastRouteCalculationTime).inSeconds > 30); // Recalculate every 30 seconds
 
       if (shouldRecalculate) {
-        final newRoute = _astar.findPath(
+        final newRoute = await _calculateRouteWithOsm(
           start: currentPosition,
           end: destination,
           hazards: activeHazards,

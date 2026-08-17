@@ -18,13 +18,11 @@ class RealtimeHazardService {
       final channel = _supabase.channel('realtime:public:hazards');
 
       // Listen to Postgres changes on the hazards table
-      channel.on(
-        RealtimeListenTypes.postgresChanges,
-        ChannelFilter(
-          schema: 'public',
-          table: 'hazards',
-        ),
-        (payload, [ref]) => _fetchAndAddHazards(controller, _supabase, status),
+      channel.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'hazards',
+        callback: (payload) => _fetchAndAddHazards(controller, _supabase, status),
       );
 
       // Subscribe to the channel

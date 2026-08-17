@@ -33,7 +33,7 @@ class ConnectivityService {
   Future<bool> _checkConnectivity() async {
     try {
       final result = await _connectivity.checkConnectivity();
-      if (result == ConnectivityResult.none) {
+      if (result.length == 1 && result.first == ConnectivityResult.none) {
         return false;
       }
       return true;

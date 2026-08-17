@@ -29,7 +29,7 @@ class AuthService {
   Future<User?> signInWithGoogle() async {
     return _perfService.logDurationWithResult<User?>('SignInWithGoogle', () async {
       await _supabase.auth.signInWithOAuth(
-        Provider.google,
+        OAuthProvider.google,
       );
       // signInWithOAuth initiates the OAuth flow and doesn't return a session directly
       // The actual user will be available via authStateChanges after redirect

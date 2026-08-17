@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:route_guard/models/hazard.dart';
 
-/// Service for local caching of hazards using shared_preferences
+/// Service for local caching using shared_preferences
 class LocalCacheService {
   static const String _hazardsCacheKey = 'cached_hazards';
   static const String _pendingReportsKey = 'pending_hazard_reports';
@@ -10,6 +10,21 @@ class LocalCacheService {
   final SharedPreferences _prefs;
 
   LocalCacheService(this._prefs);
+
+  /// Generic method to get a string value from cache
+  Future<String?> getString(String key) async {
+    return _prefs.getString(key);
+  }
+
+  /// Generic method to set a string value in cache
+  Future<void> setString(String key, String value) async {
+    await _prefs.setString(key, value);
+  }
+
+  /// Generic method to remove a value from cache
+  Future<void> remove(String key) async {
+    await _prefs.remove(key);
+  }
 
   /// Cache a list of hazards locally
   Future<void> cacheHazards(List<Hazard> hazards) async {

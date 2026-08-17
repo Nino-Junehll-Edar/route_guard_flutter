@@ -114,3 +114,5 @@ ${PROJECT_NAME}.gbridge
 *.log
 
 /build
+
+android/app/build
